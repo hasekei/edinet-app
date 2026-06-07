@@ -5,18 +5,16 @@ export default function OAuthCallbackPage() {
   const [status, setStatus] = useState("認証処理中...");
 
   useEffect(() => {
-    const hash = window.location.hash.slice(1);
-    const search = window.location.search.slice(1);
-    const params = new URLSearchParams(hash || search);
-
-    const accessToken = params.get("access_token");
+    // 認可コードフローでは ?code=...&state=... がクエリパラメータで来る
+    const params = new URLSearchParams(window.location.search.slice(1));
+    const code = params.get("code");
     const error = params.get("error");
     const state = params.get("state");
 
     if (state) {
       const key = `google-oauth-${state}`;
-      if (accessToken) {
-        localStorage.setItem(key, JSON.stringify({ token: accessToken, timestamp: Date.now() }));
+      if (code) {
+        localStorage.setItem(key, JSON.stringify({ code, timestamp: Date.now() }));
         setStatus("認証成功。このタブは自動的に閉じます...");
       } else {
         localStorage.setItem(key, JSON.stringify({ error: error ?? "unknown", timestamp: Date.now() }));
@@ -27,12 +25,12 @@ export default function OAuthCallbackPage() {
     try {
       if (window.opener) {
         window.opener.postMessage(
-          { type: "GOOGLE_TOKEN", accessToken, error, state },
+          { type: "GOOGLE_TOKEN", code, error, state },
           window.location.origin
         );
       }
     } catch {
-      // opener への postMessage が失敗しても localStorage 経由で動作する
+      // window.opener が使えない場合は localStorage 経由で通信
     }
 
     setTimeout(() => window.close(), 500);

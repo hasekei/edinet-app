@@ -6,99 +6,118 @@ const HEADERS = [
   "最終利益", "1株利益", "1株配当", "発表日",
 ];
 
-// GIS ライブラリを使わず標準 OAuth implicit flow で直接トークン取得。
-// popup → localhost storage → 親ウィンドウ の通信経路を使うことで
-// Cross-Origin-Opener-Policy などブラウザのセキュリティポリシーを回避。
+// ---- PKCE ヘルパー ----------------------------------------------------------
+
+function generateCodeVerifier(): string {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+// ---- OAuth 認可コードフロー（PKCE + サーバーサイドトークン交換）-----------
+
 export async function getGoogleAccessToken(): Promise<string> {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!clientId) throw new Error("NEXT_PUBLIC_GOOGLE_CLIENT_ID が未設定です");
 
   const redirectUri = `${window.location.origin}/oauth-callback`;
   const state = Math.random().toString(36).slice(2, 10);
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
   const storageKey = `google-oauth-${state}`;
 
   const authUrl =
     `https://accounts.google.com/o/oauth2/v2/auth` +
     `?client_id=${encodeURIComponent(clientId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&response_type=token` +
+    `&response_type=code` +
     `&scope=${encodeURIComponent("https://www.googleapis.com/auth/spreadsheets")}` +
-    `&state=${state}`;
+    `&code_challenge=${codeChallenge}` +
+    `&code_challenge_method=S256` +
+    `&state=${state}` +
+    `&access_type=online`;
 
   const popup = window.open(authUrl, "_blank", "width=520,height=660,resizable=yes,scrollbars=yes");
   if (!popup) throw new Error("ポップアップがブロックされました。ブラウザのポップアップ許可を確認してください");
 
-  return new Promise((resolve, reject) => {
+  // 認可コードを localStorage 経由で受け取る
+  const code = await new Promise<string>((resolve, reject) => {
     let done = false;
 
-    const finish = (token?: string | null, error?: string | null) => {
+    const finish = (code?: string, error?: string) => {
       if (done) return;
       done = true;
       clearTimeout(timeoutId);
       clearInterval(pollId);
       localStorage.removeItem(storageKey);
+      window.removeEventListener("message", onMessage);
       try { popup.close(); } catch { /* ignore */ }
       if (error) reject(new Error(`認証エラー: ${error}`));
-      else if (token) resolve(token);
-      else reject(new Error("アクセストークンを取得できませんでした"));
+      else if (code) resolve(code);
+      else reject(new Error("認証コードを取得できませんでした"));
     };
 
-    // postMessage 経由（window.opener が使える場合は即時）
+    // postMessage（window.opener が使える場合は即時）
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
       if (!e.data || e.data.type !== "GOOGLE_TOKEN" || e.data.state !== state) return;
-      window.removeEventListener("message", onMessage);
-      finish(e.data.accessToken, e.data.error);
+      finish(e.data.code ?? undefined, e.data.error ?? undefined);
     };
     window.addEventListener("message", onMessage);
 
-    // localStorage ポーリング（COOP で postMessage が届かない場合のフォールバック）
+    // localStorage ポーリング（COOP 等で postMessage が届かない場合のフォールバック）
     const pollId = setInterval(() => {
       if (done) { clearInterval(pollId); return; }
 
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         try {
-          const { token, error } = JSON.parse(raw) as { token?: string; error?: string };
-          window.removeEventListener("message", onMessage);
-          finish(token, error);
-        } catch {
-          finish(undefined, "ストレージ解析エラー");
-        }
+          const { code, error } = JSON.parse(raw) as { code?: string; error?: string };
+          finish(code, error);
+        } catch { finish(undefined, "ストレージ解析エラー"); }
         return;
       }
 
-      // popup が閉じていたらもう少し待ってから諦める
       try {
         if (popup.closed) {
+          clearInterval(pollId);
           setTimeout(() => {
             if (done) return;
             const late = localStorage.getItem(storageKey);
-            window.removeEventListener("message", onMessage);
             if (late) {
               try {
-                const { token, error } = JSON.parse(late) as { token?: string; error?: string };
-                finish(token, error);
+                const { code, error } = JSON.parse(late) as { code?: string; error?: string };
+                finish(code, error);
               } catch { finish(undefined, "ストレージ解析エラー"); }
             } else {
               finish(undefined, "認証がキャンセルされました");
             }
           }, 400);
-          clearInterval(pollId);
         }
       } catch { /* ignore */ }
     }, 300);
 
-    // 2 分タイムアウト
     const timeoutId = setTimeout(() => {
-      window.removeEventListener("message", onMessage);
-      finish(undefined,
-        "認証タイムアウト (2分)。\n" +
-        "Google Cloud Console → 認証情報 → OAuth クライアント → " +
-        "「承認済みのリダイレクト URI」に https://edinet-app-two.vercel.app/oauth-callback が登録されているか確認してください"
-      );
+      finish(undefined, "認証タイムアウト (2分)");
     }, 120_000);
   });
+
+  // サーバーサイドルートでコードをアクセストークンに交換（client_secret はサーバー側）
+  const tokenRes = await fetch("/api/google-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, codeVerifier, redirectUri }),
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenRes.ok) throw new Error(tokenData.error ?? `トークン取得失敗 (${tokenRes.status})`);
+  return tokenData.access_token;
 }
 
 // ---- Sheets API ヘルパー ----------------------------------------------------
@@ -128,7 +147,7 @@ function sheetsErrorMessage(status: number, body: { error?: { message?: string }
   const detail = body?.error?.message;
   if (status === 401) return "認証エラー: アクセストークンが無効です。再度ボタンを押してください";
   if (status === 403) {
-    if (detail?.includes("disabled")) return "Google Sheets API が無効です。Google Cloud Console で Sheets API を有効にしてください";
+    if (detail?.includes("disabled")) return "Google Sheets API が無効です。Google Cloud Console で有効にしてください";
     return `アクセス拒否 (403): ${detail ?? "権限がありません"}`;
   }
   return detail ?? `スプレッドシート作成失敗 (HTTP ${status})`;
@@ -146,7 +165,7 @@ async function sheetsPost(url: string, accessToken: string, body: unknown): Prom
     });
   } catch (e) {
     if ((e as Error).name === "AbortError")
-      throw new Error("Sheets API がタイムアウトしました (30秒)。ネットワークを確認してください");
+      throw new Error("Sheets API がタイムアウトしました (30秒)");
     throw e;
   } finally {
     clearTimeout(tid);
