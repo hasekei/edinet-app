@@ -2,48 +2,91 @@ import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import type { AccountingStandard, FinancialData } from "@/types/financial";
 
-// JGAAP連結向けXBRLタグ（優先度順）
+// ---- タグマッピング --------------------------------------------------------
+
 const JGAAP_TAGS = {
   netSales: [
     "NetSales",
     "NetSalesOfCompletedConstructionContracts",
     "OperatingRevenues",
     "Revenues",
+    "GrossSales",
+    "NetRevenues",
   ],
   operatingIncome: ["OperatingIncome", "OperatingIncomeLoss"],
-  ordinaryIncome: ["OrdinaryIncome"],
+  ordinaryIncome: ["OrdinaryIncome", "OrdinaryIncomeLoss"],
   netIncome: [
     "ProfitLoss",
     "ProfitLossAttributableToOwnersOfParent",
     "NetIncome",
     "NetIncomeLoss",
+    "ProfitLossAttributableToOwnersOfParentInSummaryOfBusinessResults",
   ],
-  eps: ["EarningsPerShare", "BasicEarningsPerShare", "NetIncomePerShare"],
+  eps: [
+    "EarningsPerShare",
+    "BasicEarningsPerShare",
+    "NetIncomePerShare",
+    "EarningsPerShareBasic",
+    "ProfitLossPerShare",
+    "ProfitLossAttributableToOwnersOfParentPerShare",
+    "BasicEarningsLossPerShare",
+    "NetIncomeLossPerShare",
+  ],
   dps: [
     "AnnualDividendsPerShare",
     "DividendsPerShare",
     "DividendsPaidPerShare",
     "AnnualDividendPerShare",
+    "DividendsPerShareOfCommonStock",
+    "CashDividendsPerShare",
+    "AnnualCashDividendsPerShare",
+    "YearEndDividendsPerShare",
+    "InterimDividendsPerShare",
+    "DividendPerShare",
   ],
 };
 
-// IFRS向けタグ
 const IFRS_TAGS = {
-  netSales: ["Revenue", "RevenueIFRSKeyFinancialData", "SalesRevenueIFRS"],
+  netSales: [
+    "Revenue",
+    "RevenueIFRSKeyFinancialData",
+    "SalesRevenueIFRS",
+    "RevenueIFRS",
+    "NetSalesIFRS",
+  ],
   operatingIncome: [
     "OperatingProfitLossIFRS",
     "ProfitLossFromOperatingActivitiesIFRS",
+    "OperatingIncomeIFRS",
   ],
   ordinaryIncome: [],
   netIncome: [
     "ProfitLossAttributableToOwnersOfParentIFRS",
     "ProfitLossIFRS",
+    "NetIncomeIFRS",
   ],
-  eps: ["BasicEarningsLossPerShareIFRS", "BasicEarningsPerShareIFRS"],
-  dps: ["DividendsPerShareIFRS", "DividendsPaidPerShareIFRS"],
+  eps: [
+    "BasicEarningsLossPerShareIFRS",
+    "BasicEarningsPerShareIFRS",
+    "EarningsLossPerShareIFRS",
+    "EarningsPerShareIFRS",
+    "BasicEarningsLossPerShare",
+    "BasicEarningsPerShare",
+    "EarningsPerShare",
+  ],
+  dps: [
+    "DividendsPerShareIFRS",
+    "DividendsPaidPerShareIFRS",
+    "AnnualDividendsPerShareIFRS",
+    "CashDividendsPerShareIFRS",
+    "DividendsPerShare",
+    "AnnualDividendsPerShare",
+    "DividendPerShareIFRS",
+  ],
 };
 
-// contextRef で連結/単体を判別するキーワード
+// ---- コンテキスト --------------------------------------------------------
+
 const CONSOLIDATED_CONTEXTS = [
   "CurrentYearDuration_ConsolidatedMember",
   "CurrentYearDuration",
@@ -53,6 +96,8 @@ const NON_CONSOLIDATED_CONTEXTS = [
   "CurrentYearDuration_NonConsolidatedMember",
   "FilingDateInstant_NonConsolidatedMember",
 ];
+
+// ---- 型定義 ---------------------------------------------------------------
 
 export interface ParsedFinancials {
   netSales: number | null;
@@ -66,20 +111,46 @@ export interface ParsedFinancials {
   periodEnd: string;
 }
 
+// ---- ZIP 解析 -------------------------------------------------------------
+
 export function parseXbrlZip(zipBuffer: Buffer): ParsedFinancials {
   const zip = new AdmZip(zipBuffer);
   const entries = zip.getEntries();
 
-  // XBRLインスタンスファイルを探す（.xbrl or -ixbrl.htm）
+  // 除外パターン（リンクベース・マニフェスト）
+  const isExcluded = (name: string) =>
+    /manifest|_cal\.|_def\.|_lab\.|_pre\.|_ref\./i.test(name);
+
+  // 1. 従来型 XBRL (.xbrl)
   const xbrlEntry =
     entries.find(
       (e) =>
         !e.isDirectory &&
-        (e.entryName.endsWith(".xbrl") ||
-          e.entryName.match(/-ixbrl\.htm$/i)) &&
-        !e.entryName.includes("manifest") &&
-        !e.entryName.includes("label")
-    ) ?? entries.find((e) => !e.isDirectory && e.entryName.endsWith(".xbrl"));
+        e.entryName.endsWith(".xbrl") &&
+        !isExcluded(e.entryName)
+    ) ??
+    // 2. Inline XBRL: -ixbrl.htm
+    entries.find(
+      (e) =>
+        !e.isDirectory &&
+        e.entryName.match(/-ixbrl\.htm$/i) &&
+        !isExcluded(e.entryName)
+    ) ??
+    // 3. Inline XBRL: PublicDoc ディレクトリ内の .htm ファイル（-ixbrl なし）
+    entries.find(
+      (e) =>
+        !e.isDirectory &&
+        /\.(htm|html|xhtml)$/i.test(e.entryName) &&
+        /publicdoc/i.test(e.entryName) &&
+        !isExcluded(e.entryName)
+    ) ??
+    // 4. 任意の .htm ファイル（最終フォールバック）
+    entries.find(
+      (e) =>
+        !e.isDirectory &&
+        /\.(htm|html|xhtml)$/i.test(e.entryName) &&
+        !isExcluded(e.entryName)
+    );
 
   if (!xbrlEntry) {
     throw new Error("XBRLファイルが見つかりません");
@@ -88,6 +159,8 @@ export function parseXbrlZip(zipBuffer: Buffer): ParsedFinancials {
   const content = xbrlEntry.getData().toString("utf-8");
   return extractFromXbrlContent(content);
 }
+
+// ---- XBRL コンテンツ解析 --------------------------------------------------
 
 function extractFromXbrlContent(content: string): ParsedFinancials {
   const parser = new XMLParser({
@@ -100,12 +173,9 @@ function extractFromXbrlContent(content: string): ParsedFinancials {
 
   const parsed = parser.parse(content);
 
-  // 会計基準の判定
   const accountingStandard = detectAccountingStandard(content);
-  const tagMap =
-    accountingStandard === "IFRS" ? IFRS_TAGS : JGAAP_TAGS;
+  const tagMap = accountingStandard === "IFRS" ? IFRS_TAGS : JGAAP_TAGS;
 
-  // xbrli:xbrl or xbrl ルート要素を探す
   const root =
     parsed["xbrli:xbrl"] ??
     parsed["xbrl"] ??
@@ -113,13 +183,9 @@ function extractFromXbrlContent(content: string): ParsedFinancials {
     Object.values(parsed)[0] ??
     {};
 
-  // contextRef情報の収集
   const contexts = collectContexts(root);
   const isConsolidated = hasConsolidatedContext(contexts);
-
-  // 財務データの抽出
   const flatElements = flattenXbrl(root);
-
   const periodEnd = extractPeriodEnd(contexts) ?? "";
 
   return {
@@ -135,12 +201,16 @@ function extractFromXbrlContent(content: string): ParsedFinancials {
   };
 }
 
+// ---- 会計基準判定 ----------------------------------------------------------
+
 function detectAccountingStandard(content: string): AccountingStandard {
   if (content.includes("jpigp") || content.includes("IFRS")) return "IFRS";
   if (content.includes("jpus") || content.includes("US-GAAP")) return "US_GAAP";
   if (content.includes("jppfs") || content.includes("jpdei")) return "JGAAP";
   return "Unknown";
 }
+
+// ---- コンテキスト収集 -------------------------------------------------------
 
 interface Context {
   id: string;
@@ -185,15 +255,19 @@ function hasConsolidatedContext(contexts: Context[]): boolean {
 }
 
 function extractPeriodEnd(contexts: Context[]): string | undefined {
-  // 連結当期のコンテキストから期末日を取得
-  const ctx = contexts.find((c) =>
-    CONSOLIDATED_CONTEXTS.some((kw) => c.id.includes(kw))
-  ) ?? contexts.find((c) =>
-    NON_CONSOLIDATED_CONTEXTS.some((kw) => c.id.includes(kw))
-  ) ?? contexts[0];
+  const ctx =
+    contexts.find((c) =>
+      CONSOLIDATED_CONTEXTS.some((kw) => c.id.includes(kw))
+    ) ??
+    contexts.find((c) =>
+      NON_CONSOLIDATED_CONTEXTS.some((kw) => c.id.includes(kw))
+    ) ??
+    contexts[0];
 
   return ctx?.endDate || ctx?.instant;
 }
+
+// ---- 要素フラット化 (iXBRL 対応) -------------------------------------------
 
 interface FlatElement {
   localName: string;
@@ -211,8 +285,35 @@ function flattenXbrl(root: unknown): FlatElement[] {
     for (const [key, val] of Object.entries(o)) {
       if (key.startsWith("@_") || key === "#text") continue;
 
-      const localName = key.includes(":") ? key.split(":")[1] : key;
+      const keyLocalName = key.includes(":") ? key.split(":")[1] : key;
 
+      // ----- iXBRL の ix:nonFraction / ix:nonNumeric 処理 -----
+      // name 属性に "jppfs_cor:EarningsPerShare" のような実タグ名が入る
+      if (keyLocalName === "nonFraction" || keyLocalName === "nonNumeric") {
+        const items = Array.isArray(val) ? val : [val];
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          const itemObj = item as Record<string, unknown>;
+          const nameAttr = String(itemObj["@_name"] ?? "");
+          if (nameAttr) {
+            const ixLocalName = nameAttr.includes(":") ? nameAttr.split(":")[1] : nameAttr;
+            let numVal = extractNumericValue(itemObj);
+            if (numVal !== null) {
+              // scale 属性: iXBRL では scale=6 なら × 10^6
+              const scale = Number(itemObj["@_scale"] ?? 0);
+              if (scale !== 0) numVal = numVal * Math.pow(10, scale);
+            }
+            const contextRef = String(itemObj["@_contextRef"] ?? "");
+            if (ixLocalName && numVal !== null && contextRef) {
+              elements.push({ localName: ixLocalName, value: numVal, contextRef });
+            }
+          }
+          visit(item);
+        }
+        continue; // 通常処理をスキップ
+      }
+
+      // ----- 通常の XBRL 要素 -----
       if (Array.isArray(val)) {
         for (const item of val) {
           if (item && typeof item === "object") {
@@ -220,7 +321,7 @@ function flattenXbrl(root: unknown): FlatElement[] {
             const numVal = extractNumericValue(itemObj);
             const contextRef = String(itemObj["@_contextRef"] ?? "");
             if (numVal !== null && contextRef) {
-              elements.push({ localName, value: numVal, contextRef });
+              elements.push({ localName: keyLocalName, value: numVal, contextRef });
             }
             visit(item);
           }
@@ -229,7 +330,7 @@ function flattenXbrl(root: unknown): FlatElement[] {
         const numVal = extractNumericValue(val as Record<string, unknown>);
         const contextRef = String((val as Record<string, unknown>)["@_contextRef"] ?? "");
         if (numVal !== null && contextRef) {
-          elements.push({ localName, value: numVal, contextRef });
+          elements.push({ localName: keyLocalName, value: numVal, contextRef });
         }
         visit(val);
       }
@@ -243,9 +344,13 @@ function flattenXbrl(root: unknown): FlatElement[] {
 function extractNumericValue(obj: Record<string, unknown>): number | null {
   const raw = obj["#text"] ?? obj["@_value"] ?? (typeof obj === "number" ? obj : null);
   if (raw === null || raw === undefined || raw === "") return null;
-  const num = Number(String(raw).replace(/,/g, ""));
+  const str = String(raw).replace(/,/g, "").trim();
+  if (!str) return null;
+  const num = Number(str);
   return isNaN(num) ? null : num;
 }
+
+// ---- 値の検索 --------------------------------------------------------------
 
 function findValue(
   elements: FlatElement[],
@@ -260,7 +365,7 @@ function findValue(
     : CONSOLIDATED_CONTEXTS;
 
   for (const tagName of tagNames) {
-    // 優先コンテキストから探す
+    // 1. 優先コンテキスト
     const preferred = elements.find(
       (e) =>
         e.localName === tagName &&
@@ -268,15 +373,13 @@ function findValue(
     );
     if (preferred) return preferred.value;
 
-    // CurrentYearDurationのみ含むコンテキスト
+    // 2. CurrentYearDuration を含む任意のコンテキスト
     const duration = elements.find(
-      (e) =>
-        e.localName === tagName &&
-        e.contextRef.includes("CurrentYearDuration")
+      (e) => e.localName === tagName && e.contextRef.includes("CurrentYearDuration")
     );
     if (duration) return duration.value;
 
-    // フォールバック
+    // 3. フォールバックコンテキスト
     const fallback = elements.find(
       (e) =>
         e.localName === tagName &&
@@ -284,7 +387,7 @@ function findValue(
     );
     if (fallback) return fallback.value;
 
-    // タグ名だけ一致する最初の要素
+    // 4. タグ名一致なら任意コンテキストで最初の要素
     const any = elements.find((e) => e.localName === tagName);
     if (any) return any.value;
   }

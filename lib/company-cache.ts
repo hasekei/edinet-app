@@ -17,18 +17,25 @@ async function buildCompanyList(): Promise<CachedCompany[]> {
 
   const today = new Date();
   const dates: string[] = [];
-  for (let i = 0; i < 14; i++) {
+  // 四半期提出サイクル (90日) をカバーして主要上場企業をすべて収録
+  for (let i = 0; i < 90; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     dates.push(dateStr(d));
   }
 
-  // 全日付を並列フェッチ
+  // 全日付を並列フェッチ（個別に3秒タイムアウト）
   const allDocs = await Promise.all(
     dates.map(async (date) => {
       try {
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 3000);
         const url = `https://disclosure.edinet-fsa.go.jp/api/v2/documents.json?date=${date}&type=2&Subscription-Key=${apiKey}`;
-        const res = await fetch(url, { next: { revalidate: 86400 } });
+        const res = await fetch(url, {
+          signal: controller.signal,
+          next: { revalidate: 86400 },
+        });
+        clearTimeout(tid);
         if (!res.ok) return [] as DocumentInfo[];
         const json = await res.json();
         return (json.results ?? []) as DocumentInfo[];
@@ -61,7 +68,7 @@ async function buildCompanyList(): Promise<CachedCompany[]> {
 export const getCompanyList = unstable_cache(
   buildCompanyList,
   ["edinet-company-list"],
-  { revalidate: 6 * 60 * 60 }
+  { revalidate: 24 * 60 * 60 }
 );
 
 export function searchCompanies(
