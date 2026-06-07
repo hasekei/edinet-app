@@ -67,7 +67,7 @@ async function buildCompanyList(): Promise<CachedCompany[]> {
 // Vercel のコールドスタートをまたいでも再ビルドしない
 export const getCompanyList = unstable_cache(
   buildCompanyList,
-  ["edinet-company-list"],
+  ["edinet-company-list-v3"],
   { revalidate: 24 * 60 * 60 }
 );
 

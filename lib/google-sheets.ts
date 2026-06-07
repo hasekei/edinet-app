@@ -23,13 +23,14 @@ declare global {
 }
 
 function loadGIS(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return;
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined") { resolve(); return; }
     if (window.google?.accounts) { resolve(); return; }
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Google認証ライブラリの読み込みに失敗しました"));
     document.head.appendChild(script);
   });
 }
@@ -43,10 +44,15 @@ export async function getGoogleAccessToken(): Promise<string> {
   }
   await loadGIS();
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("認証タイムアウト。ポップアップがブロックされていないか確認してください")),
+      120_000
+    );
     const client = window.google!.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: "https://www.googleapis.com/auth/spreadsheets",
       callback: (r) => {
+        clearTimeout(timeout);
         if (r.error || !r.access_token) reject(new Error(r.error ?? "Google 認証失敗"));
         else resolve(r.access_token);
       },
