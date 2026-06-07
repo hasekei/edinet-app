@@ -45,8 +45,12 @@ export async function getGoogleAccessToken(): Promise<string> {
   await loadGIS();
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
-      () => reject(new Error("認証タイムアウト。ポップアップがブロックされていないか確認してください")),
-      120_000
+      () => reject(new Error(
+        "認証タイムアウト (15秒)。\n" +
+        "Google Cloud Console → 認証情報 → OAuth クライアント → " +
+        "「承認済みのJavaScript生成元」に https://edinet-app-two.vercel.app が登録されているか確認してください"
+      )),
+      15_000
     );
     const client = window.google!.accounts.oauth2.initTokenClient({
       client_id: clientId,
