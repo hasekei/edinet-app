@@ -15,32 +15,41 @@ interface Props {
   results: BatchResult[];
 }
 
-// 百万円単位の数値を億円・兆円に変換して表示
 function formatJPY(v: number | null | undefined): { text: string; negative: boolean } {
   if (v === null || v === undefined) return { text: "—", negative: false };
   const negative = v < 0;
   const abs = Math.abs(v);
 
   let text: string;
-  // v は百万円単位
-  if (abs >= 1_000_000) {
-    // 1兆円以上
-    text = (v / 1_000_000).toLocaleString("ja-JP", {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }) + " 兆円";
-  } else if (abs >= 10_000) {
-    // 1兆円未満・100億円以上 → X,XXX億円
-    text = Math.round(v / 100).toLocaleString("ja-JP") + " 億円";
-  } else if (abs >= 100) {
-    // 100億円未満・1億円以上 → XX.X億円
-    text = (v / 100).toLocaleString("ja-JP", {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }) + " 億円";
+  // iXBRL（scale 適用後）は円単位、従来型 XBRL は百万円単位で渡される。
+  // 上場企業の百万円値は最大 ~10^7 程度、円値は最小 10^8 以上なので閾値で判別可能。
+  if (abs >= 1e8) {
+    // 円単位
+    if (abs >= 1e12) {
+      text = (v / 1e12).toLocaleString("ja-JP", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }) + " 兆円";
+    } else {
+      text = Math.round(v / 1e8).toLocaleString("ja-JP") + " 億円";
+    }
   } else {
-    // 1億円未満 → そのまま百万円
-    text = v.toLocaleString("ja-JP") + " 百万円";
+    // 百万円単位
+    if (abs >= 1_000_000) {
+      text = (v / 1_000_000).toLocaleString("ja-JP", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }) + " 兆円";
+    } else if (abs >= 10_000) {
+      text = Math.round(v / 100).toLocaleString("ja-JP") + " 億円";
+    } else if (abs >= 100) {
+      text = (v / 100).toLocaleString("ja-JP", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }) + " 億円";
+    } else {
+      text = v.toLocaleString("ja-JP") + " 百万円";
+    }
   }
 
   return { text, negative };
@@ -135,7 +144,7 @@ export default function FinancialTable({ results }: Props) {
         </TableBody>
       </Table>
       <p className="px-4 py-2 text-xs text-muted-foreground border-t">
-        ※ XBRL原値（百万円単位）を億円・兆円に変換して表示。▼ は赤字を示します。
+        ※ 億円・兆円単位に変換して表示。▼ は赤字を示します。
       </p>
     </div>
   );
