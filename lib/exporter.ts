@@ -1,37 +1,49 @@
 import ExcelJS from "exceljs";
-import type { FinancialData } from "@/types/financial";
+import type { ExportRow } from "@/types/financial";
 
 const HEADERS = [
   "証券コード",
-  "会社名",
-  "会計期間終了日",
-  "連結/単体",
-  "会計基準",
+  "銘柄名",
+  "業種",
+  "前日終値",
+  "PER",
+  "PBR",
+  "配当利回り(%)",
+  "信用倍率",
+  "決算期",
   "売上高",
-  "営業利益",
   "経常利益",
-  "純利益",
+  "最終利益",
+  "1株利益",
+  "1株配当",
+  "発表日",
 ];
 
-function formatRow(d: FinancialData): (string | number | null)[] {
+function formatRow(d: ExportRow): (string | number | null)[] {
   return [
     d.secCode,
     d.companyName,
+    d.industry ?? "",
+    d.currentPrice,
+    d.per,
+    d.pbr,
+    d.dividendYield,
+    d.marginRatio,
     d.periodEnd,
-    d.isConsolidated ? "連結" : "単体",
-    d.accountingStandard,
     d.netSales,
-    d.operatingIncome,
     d.ordinaryIncome,
     d.netIncome,
+    d.eps,
+    d.dps,
+    d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
   ];
 }
 
-export function toCSV(rows: FinancialData[]): string {
+export function toCSV(rows: ExportRow[]): string {
   const lines: string[] = [HEADERS.join(",")];
   for (const row of rows) {
     const cells = formatRow(row).map((v) => {
-      if (v === null) return "";
+      if (v === null || v === undefined) return "";
       const str = String(v);
       return str.includes(",") ? `"${str}"` : str;
     });
@@ -40,14 +52,12 @@ export function toCSV(rows: FinancialData[]): string {
   return lines.join("\n");
 }
 
-export async function toExcel(rows: FinancialData[]): Promise<Buffer> {
+export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("財務データ");
 
-  // ヘッダー行
   ws.addRow(HEADERS);
   const headerRow = ws.getRow(1);
-  headerRow.font = { bold: true };
   headerRow.fill = {
     type: "pattern",
     pattern: "solid",
@@ -55,18 +65,23 @@ export async function toExcel(rows: FinancialData[]): Promise<Buffer> {
   };
   headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
 
-  // データ行
   for (const d of rows) {
     ws.addRow(formatRow(d));
   }
 
-  // 列幅と書式設定
-  const numericCols = [6, 7, 8, 9]; // 売上高〜純利益
+  // 列幅・数値書式
+  const numericCols = [4, 5, 6, 7, 8, 10, 11, 12, 13, 14]; // 数値列
   ws.columns.forEach((col, idx) => {
-    col.width = idx === 1 ? 30 : 16;
-    if (numericCols.includes(idx + 1)) {
-      col.numFmt = "#,##0";
+    const colNo = idx + 1;
+    col.width = colNo === 2 ? 28 : colNo === 3 ? 18 : 14;
+    if (numericCols.includes(colNo)) {
       col.alignment = { horizontal: "right" };
+      // 整数列と小数列で書式を分ける
+      if ([4, 10, 11, 12, 13, 14].includes(colNo)) {
+        col.numFmt = "#,##0.##";
+      } else {
+        col.numFmt = "#,##0.00";
+      }
     }
   });
 

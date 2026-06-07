@@ -12,7 +12,8 @@ async function fetchOne(
   docID: string,
   filerName: string,
   edinetCode: string,
-  periodEnd: string
+  periodEnd: string,
+  submitDateTime: string
 ): Promise<FinancialData> {
   const zipBuffer = await downloadDocumentZip(docID);
   const parsed = parseXbrlZip(zipBuffer);
@@ -23,12 +24,15 @@ async function fetchOne(
     docID,
     fiscalYear: (parsed.periodEnd || periodEnd).slice(0, 4),
     periodEnd: parsed.periodEnd || periodEnd,
+    submitDateTime,
     accountingStandard: parsed.accountingStandard,
     isConsolidated: parsed.isConsolidated,
     netSales: parsed.netSales,
     operatingIncome: parsed.operatingIncome,
     ordinaryIncome: parsed.ordinaryIncome,
     netIncome: parsed.netIncome,
+    eps: parsed.eps,
+    dps: parsed.dps,
   };
 }
 
@@ -65,13 +69,12 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      // 各年度のXBRLを取得（最大5件まで並列）
       const results: FinancialData[] = [];
       for (let i = 0; i < Math.min(docs.length, 10); i++) {
         const d = docs[i];
         try {
           const data = await fetchOne(
-            secCode, d.docID, d.filerName, d.edinetCode, d.periodEnd
+            secCode, d.docID, d.filerName, d.edinetCode, d.periodEnd, d.submitDateTime
           );
           results.push(data);
         } catch {
@@ -97,7 +100,8 @@ export async function GET(req: NextRequest) {
 
     const latest = docs[0];
     const data = await fetchOne(
-      secCode, latest.docID, latest.filerName, latest.edinetCode, latest.periodEnd
+      secCode, latest.docID, latest.filerName, latest.edinetCode,
+      latest.periodEnd, latest.submitDateTime
     );
 
     return NextResponse.json({ multiple: false, data });

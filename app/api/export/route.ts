@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { toCSV, toExcel } from "@/lib/exporter";
-import type { FinancialData } from "@/types/financial";
+import type { ExportRow } from "@/types/financial";
 
 export async function POST(req: NextRequest) {
   const format = req.nextUrl.searchParams.get("format") ?? "csv";
-  const body = await req.json() as { rows: FinancialData[] };
+  const body = await req.json() as { rows: ExportRow[] };
   const { rows } = body;
 
   if (!Array.isArray(rows) || rows.length === 0) {
@@ -21,7 +21,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // CSV (BOM付きでExcelで文字化けしないように)
   const csv = "﻿" + toCSV(rows);
   return new NextResponse(csv, {
     headers: {

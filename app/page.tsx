@@ -9,7 +9,7 @@ import CompanySearch from "@/components/CompanySearch";
 import FinancialTable from "@/components/FinancialTable";
 import ExportPanel from "@/components/ExportPanel";
 import StatusList from "@/components/StatusList";
-import type { BatchResult, FinancialData, MarketData } from "@/types/financial";
+import type { BatchResult, FinancialData, MarketData, ExportRow } from "@/types/financial";
 import MarketDataTable from "@/components/MarketDataTable";
 
 function sleep(ms: number) {
@@ -113,6 +113,27 @@ export default function Home() {
     if (r.multipleData) return r.multipleData;
     if (r.data) return [r.data];
     return [];
+  });
+
+  const exportRows: ExportRow[] = doneRows.map((d) => {
+    const m = marketData[d.secCode];
+    return {
+      secCode: d.secCode,
+      companyName: d.companyName,
+      industry: m?.industry ?? null,
+      currentPrice: m?.currentPrice ?? null,
+      per: m?.per ?? null,
+      pbr: m?.pbr ?? null,
+      dividendYield: m?.dividendYield ?? null,
+      marginRatio: null,
+      periodEnd: d.periodEnd,
+      netSales: d.netSales,
+      ordinaryIncome: d.ordinaryIncome,
+      netIncome: d.netIncome,
+      eps: d.eps,
+      dps: d.dps,
+      submitDateTime: d.submitDateTime ?? null,
+    };
   });
 
   function fetchMarketDataBg(code: string) {
@@ -313,7 +334,7 @@ export default function Home() {
               財務データ（有価証券報告書）
             </h2>
             <FinancialTable results={results} />
-            <ExportPanel rows={doneRows} />
+            <ExportPanel rows={exportRows} />
           </div>
         </section>
       )}

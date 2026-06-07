@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import type { FinancialData } from "@/types/financial";
+import type { ExportRow } from "@/types/financial";
 
 interface Props {
-  rows: FinancialData[];
+  rows: ExportRow[];
 }
 
 export default function ExportPanel({ rows }: Props) {

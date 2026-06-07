@@ -7,12 +7,15 @@ export interface FinancialData {
   docID: string;
   fiscalYear: string;
   periodEnd: string;
+  submitDateTime: string;
   accountingStandard: AccountingStandard;
   isConsolidated: boolean;
   netSales: number | null;
   operatingIncome: number | null;
   ordinaryIncome: number | null;
   netIncome: number | null;
+  eps: number | null;
+  dps: number | null;
 }
 
 export interface DocumentInfo {
@@ -47,4 +50,22 @@ export interface MarketData {
   pbr: number | null;
   dividendYield: number | null;
   industry: string | null;
+}
+
+export interface ExportRow {
+  secCode: string;
+  companyName: string;
+  industry: string | null;
+  currentPrice: number | null;
+  per: number | null;
+  pbr: number | null;
+  dividendYield: number | null;
+  marginRatio: number | null;
+  periodEnd: string;
+  netSales: number | null;
+  ordinaryIncome: number | null;
+  netIncome: number | null;
+  eps: number | null;
+  dps: number | null;
+  submitDateTime: string | null;
 }

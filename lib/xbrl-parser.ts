@@ -18,6 +18,13 @@ const JGAAP_TAGS = {
     "NetIncome",
     "NetIncomeLoss",
   ],
+  eps: ["EarningsPerShare", "BasicEarningsPerShare", "NetIncomePerShare"],
+  dps: [
+    "AnnualDividendsPerShare",
+    "DividendsPerShare",
+    "DividendsPaidPerShare",
+    "AnnualDividendPerShare",
+  ],
 };
 
 // IFRS向けタグ
@@ -32,6 +39,8 @@ const IFRS_TAGS = {
     "ProfitLossAttributableToOwnersOfParentIFRS",
     "ProfitLossIFRS",
   ],
+  eps: ["BasicEarningsLossPerShareIFRS", "BasicEarningsPerShareIFRS"],
+  dps: ["DividendsPerShareIFRS", "DividendsPaidPerShareIFRS"],
 };
 
 // contextRef で連結/単体を判別するキーワード
@@ -50,6 +59,8 @@ export interface ParsedFinancials {
   operatingIncome: number | null;
   ordinaryIncome: number | null;
   netIncome: number | null;
+  eps: number | null;
+  dps: number | null;
   isConsolidated: boolean;
   accountingStandard: AccountingStandard;
   periodEnd: string;
@@ -116,6 +127,8 @@ function extractFromXbrlContent(content: string): ParsedFinancials {
     operatingIncome: findValue(flatElements, tagMap.operatingIncome, isConsolidated),
     ordinaryIncome: findValue(flatElements, tagMap.ordinaryIncome, isConsolidated),
     netIncome: findValue(flatElements, tagMap.netIncome, isConsolidated),
+    eps: findValue(flatElements, tagMap.eps, isConsolidated),
+    dps: findValue(flatElements, tagMap.dps, isConsolidated),
     isConsolidated,
     accountingStandard,
     periodEnd,
