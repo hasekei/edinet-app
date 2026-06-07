@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +107,7 @@ export default function Home() {
   const [results, setResults] = useState<BatchResult[]>([]);
   const [running, setRunning] = useState(false);
   const [marketData, setMarketData] = useState<Record<string, MarketData>>({});
+  const resultsRef = useRef<HTMLElement>(null);
 
   const doneRows = results.flatMap((r) => {
     if (r.status !== "done") return [];
@@ -160,6 +161,7 @@ export default function Home() {
     setRunning(true);
     setMarketData({});
     setResults([{ secCode: code, companyName: singleName, status: "processing" }]);
+    setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     try {
       const result = await fetchFinancials(code, singleUseRange, singleFromYear, singleToYear);
       const name = result.data?.companyName ?? result.multipleData?.[0]?.companyName ?? singleName;
@@ -198,6 +200,7 @@ export default function Home() {
     setMarketData({});
     const initial: BatchResult[] = codes.map((c) => ({ secCode: c, status: "pending" }));
     setResults(initial);
+    setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     const updated = [...initial];
 
     for (let i = 0; i < codes.length; i++) {
@@ -300,13 +303,13 @@ export default function Home() {
           onToChange={setBatchToYear}
         />
 
-        <Button onClick={handleBatch} disabled={running}>
+        <Button onClick={handleBatch} disabled={running || !batchText.trim()}>
           {running && results.length > 1 ? "処理中..." : "一括実行"}
         </Button>
       </section>
 
       {results.length > 0 && (
-        <section>
+        <section ref={resultsRef}>
           <StatusList results={results} />
         </section>
       )}

@@ -13,7 +13,7 @@ export default function CompanySearch({ onSelect, placeholder = "会社名" }: P
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CachedCompany[]>([]);
   const [open, setOpen] = useState(false);
-  const [building, setBuilding] = useState(false);
+  const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -30,16 +30,18 @@ export default function CompanySearch({ onSelect, placeholder = "会社名" }: P
       return;
     }
     debounceRef.current = setTimeout(async () => {
+      setLoading(true);
       try {
         const res = await fetch(
           `/api/search-company?q=${encodeURIComponent(query)}`
         );
         const json = await res.json();
         setResults(json.results ?? []);
-        setBuilding(json.building ?? false);
         setOpen(true);
       } catch {
         /* ignore */
+      } finally {
+        setLoading(false);
       }
     }, 250);
   }, [query]);
@@ -69,9 +71,9 @@ export default function CompanySearch({ onSelect, placeholder = "会社名" }: P
         placeholder={placeholder}
         onFocus={() => results.length > 0 && setOpen(true)}
       />
-      {building && query && (
+      {loading && query && (
         <p className="absolute right-2 top-2.5 text-xs text-muted-foreground">
-          検索インデックス構築中...
+          検索中...
         </p>
       )}
       {open && results.length > 0 && (
@@ -90,7 +92,7 @@ export default function CompanySearch({ onSelect, placeholder = "会社名" }: P
           ))}
         </ul>
       )}
-      {open && results.length === 0 && query && !building && (
+      {open && results.length === 0 && query && !loading && (
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover px-3 py-2 text-sm text-muted-foreground shadow-md">
           候補が見つかりません（証券コードで直接入力してください）
         </div>
