@@ -1,65 +1,320 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import CompanySearch from "@/components/CompanySearch";
+import FinancialTable from "@/components/FinancialTable";
+import ExportPanel from "@/components/ExportPanel";
+import StatusList from "@/components/StatusList";
+import type { BatchResult, FinancialData, MarketData } from "@/types/financial";
+import MarketDataTable from "@/components/MarketDataTable";
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+const currentYear = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 11 }, (_, i) => currentYear - 10 + i);
+
+function YearRangePicker({
+  enabled,
+  onToggle,
+  fromYear,
+  toYear,
+  onFromChange,
+  onToChange,
+}: {
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
+  fromYear: number;
+  toYear: number;
+  onFromChange: (v: number) => void;
+  onToChange: (v: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="rounded"
+        />
+        期間を指定して複数年取得
+        <span className="text-xs text-muted-foreground">（指定なしで直近を取得）</span>
+      </label>
+      {enabled && (
+        <div className="flex items-center gap-2 pl-6 text-sm">
+          <select
+            value={fromYear}
+            onChange={(e) => onFromChange(Number(e.target.value))}
+            className="rounded-md border px-2 py-1.5 text-sm bg-background"
+          >
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>{y}年</option>
+            ))}
+          </select>
+          <span className="text-muted-foreground">〜</span>
+          <select
+            value={toYear}
+            onChange={(e) => onToChange(Number(e.target.value))}
+            className="rounded-md border px-2 py-1.5 text-sm bg-background"
+          >
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>{y}年</option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">（会計期間終了年）</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+async function fetchFinancials(
+  secCode: string,
+  useRange: boolean,
+  fromYear: number,
+  toYear: number
+): Promise<{ data?: FinancialData; multipleData?: FinancialData[] }> {
+  let url = `/api/financials?secCode=${secCode}`;
+  if (useRange) url += `&fromYear=${fromYear}&toYear=${toYear}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? "取得失敗");
+  if (json.multiple) return { multipleData: json.data as FinancialData[] };
+  return { data: json.data as FinancialData };
+}
 
 export default function Home() {
+  // 単一検索
+  const [singleCode, setSingleCode] = useState("");
+  const [singleName, setSingleName] = useState("");
+  const [singleUseRange, setSingleUseRange] = useState(false);
+  const [singleFromYear, setSingleFromYear] = useState(currentYear - 2);
+  const [singleToYear, setSingleToYear] = useState(currentYear);
+
+  // 一括処理
+  const [batchText, setBatchText] = useState("");
+  const [batchUseRange, setBatchUseRange] = useState(false);
+  const [batchFromYear, setBatchFromYear] = useState(currentYear - 2);
+  const [batchToYear, setBatchToYear] = useState(currentYear);
+
+  // 共通
+  const [results, setResults] = useState<BatchResult[]>([]);
+  const [running, setRunning] = useState(false);
+  const [marketData, setMarketData] = useState<Record<string, MarketData>>({});
+
+  const doneRows = results.flatMap((r) => {
+    if (r.status !== "done") return [];
+    if (r.multipleData) return r.multipleData;
+    if (r.data) return [r.data];
+    return [];
+  });
+
+  function fetchMarketDataBg(code: string) {
+    fetch(`/api/market-data?secCode=${code}`)
+      .then((r) => r.json())
+      .then((item: MarketData & { error?: string }) => {
+        if (item && !item.error) {
+          setMarketData((prev) => ({ ...prev, [code]: item }));
+        }
+      })
+      .catch(() => {});
+  }
+
+  async function handleSingle() {
+    const code = singleCode.trim();
+    if (!/^\d{4}$/.test(code)) {
+      toast.error("4桁の証券コードを入力してください");
+      return;
+    }
+    if (singleUseRange && singleFromYear > singleToYear) {
+      toast.error("開始年は終了年以前にしてください");
+      return;
+    }
+    setRunning(true);
+    setMarketData({});
+    setResults([{ secCode: code, companyName: singleName, status: "processing" }]);
+    try {
+      const result = await fetchFinancials(code, singleUseRange, singleFromYear, singleToYear);
+      const name = result.data?.companyName ?? result.multipleData?.[0]?.companyName ?? singleName;
+      setResults([{ secCode: code, companyName: name, status: "done", ...result }]);
+      toast.success(`${name} のデータを取得しました`);
+      fetchMarketDataBg(code);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setResults([{ secCode: code, status: "error", error: msg }]);
+      toast.error(msg);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function handleBatch() {
+    const codes = batchText
+      .split(/[\n,\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^\d{4}$/.test(s));
+
+    if (codes.length === 0) {
+      toast.error("有効な4桁の証券コードが見つかりません");
+      return;
+    }
+    if (codes.length > 50) {
+      toast.error("一度に処理できるのは50社までです");
+      return;
+    }
+    if (batchUseRange && batchFromYear > batchToYear) {
+      toast.error("開始年は終了年以前にしてください");
+      return;
+    }
+
+    setRunning(true);
+    setMarketData({});
+    const initial: BatchResult[] = codes.map((c) => ({ secCode: c, status: "pending" }));
+    setResults(initial);
+    const updated = [...initial];
+
+    for (let i = 0; i < codes.length; i++) {
+      const code = codes[i];
+      updated[i] = { ...updated[i], status: "processing" };
+      setResults([...updated]);
+      try {
+        const result = await fetchFinancials(code, batchUseRange, batchFromYear, batchToYear);
+        const name = result.data?.companyName ?? result.multipleData?.[0]?.companyName;
+        updated[i] = { secCode: code, companyName: name, status: "done", ...result };
+        fetchMarketDataBg(code);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        updated[i] = { secCode: code, status: "error", error: msg };
+      }
+      setResults([...updated]);
+      if (i < codes.length - 1) await sleep(600);
+    }
+
+    const doneCount = updated.filter((r) => r.status === "done").length;
+    const errCount = updated.filter((r) => r.status === "error").length;
+    toast.success(`完了: ${doneCount}社成功${errCount > 0 ? `、${errCount}社エラー` : ""}`);
+    setRunning(false);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="max-w-5xl mx-auto px-4 py-10 space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">EDINET 財務データ抽出ツール</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          証券コードまたは会社名を入力してEDINETから財務データを取得します
+        </p>
+      </div>
+
+      {/* 単一検索 */}
+      <section className="rounded-lg border p-5 space-y-4">
+        <h2 className="font-semibold">単一企業検索</h2>
+
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">会社名で検索（候補選択で証券コードが自動入力）</label>
+          <CompanySearch
+            onSelect={(code, name) => {
+              setSingleCode(code);
+              setSingleName(name);
+            }}
+          />
+        </div>
+
+        <div className="max-w-sm space-y-1">
+          <label className="text-xs text-muted-foreground">証券コード（4桁）</label>
+          <Input
+            placeholder="例: 7203"
+            value={singleCode}
+            onChange={(e) => setSingleCode(e.target.value)}
+            maxLength={4}
+            className="font-mono"
+            onKeyDown={(e) => { if (e.key === "Enter" && !running) handleSingle(); }}
+          />
+        </div>
+
+        <YearRangePicker
+          enabled={singleUseRange}
+          onToggle={setSingleUseRange}
+          fromYear={singleFromYear}
+          toYear={singleToYear}
+          onFromChange={setSingleFromYear}
+          onToChange={setSingleToYear}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+
+        <Button onClick={handleSingle} disabled={running || !singleCode}>
+          {running && results.length === 1 ? "取得中..." : "検索"}
+        </Button>
+      </section>
+
+      {/* 一括処理 */}
+      <section className="rounded-lg border p-5 space-y-4">
+        <h2 className="font-semibold">一括処理（最大50社）</h2>
+
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">
+            証券コードを改行・カンマ・スペース区切りで入力
+          </label>
+          <Textarea
+            placeholder={"7203\n6758\n9984\n4755"}
+            value={batchText}
+            onChange={(e) => setBatchText(e.target.value)}
+            rows={5}
+            className="font-mono text-sm"
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <YearRangePicker
+          enabled={batchUseRange}
+          onToggle={setBatchUseRange}
+          fromYear={batchFromYear}
+          toYear={batchToYear}
+          onFromChange={setBatchFromYear}
+          onToChange={setBatchToYear}
+        />
+
+        <Button onClick={handleBatch} disabled={running}>
+          {running && results.length > 1 ? "処理中..." : "一括実行"}
+        </Button>
+      </section>
+
+      {results.length > 0 && (
+        <section>
+          <StatusList results={results} />
+        </section>
+      )}
+
+      {doneRows.length > 0 && (
+        <section className="space-y-8">
+          <div className="space-y-3">
+            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+              市場データ
+            </h2>
+            <MarketDataTable
+              companies={[
+                ...new Map(
+                  doneRows.map((d) => [
+                    d.secCode,
+                    { secCode: d.secCode, companyName: d.companyName },
+                  ])
+                ).values(),
+              ]}
+              marketData={marketData}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          </div>
+          <div className="space-y-3">
+            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+              財務データ（有価証券報告書）
+            </h2>
+            <FinancialTable results={results} />
+            <ExportPanel rows={doneRows} />
+          </div>
+        </section>
+      )}
+    </main>
   );
 }

@@ -1,0 +1,125 @@
+import { NextRequest, NextResponse } from "next/server";
+import { toJaIndustry } from "@/lib/industry-map";
+
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+let crumbCache: { crumb: string; cookie: string; expiry: number } | null = null;
+
+async function getAuth(): Promise<{ crumb: string; cookie: string } | null> {
+  const now = Date.now();
+  if (crumbCache && now < crumbCache.expiry) return crumbCache;
+
+  try {
+    const r1 = await fetch("https://fc.yahoo.com", {
+      headers: { "User-Agent": UA, Accept: "*/*" },
+      redirect: "follow",
+    });
+
+    const raw = r1.headers.get("set-cookie") ?? "";
+    const pairs = raw
+      .split(/,(?=[A-Za-z_][A-Za-z0-9_-]*=)/)
+      .map((c) => c.split(";")[0].trim())
+      .filter(Boolean);
+    const cookie = pairs.join("; ");
+
+    const r2 = await fetch(
+      "https://query2.finance.yahoo.com/v1/test/getcrumb",
+      { headers: { "User-Agent": UA, Cookie: cookie, Accept: "*/*" } }
+    );
+    if (!r2.ok) return null;
+    const crumb = (await r2.text()).trim();
+    if (!crumb || crumb.startsWith("<") || crumb.length < 2) return null;
+
+    crumbCache = { crumb, cookie, expiry: now + 3_600_000 };
+    return crumbCache;
+  } catch {
+    return null;
+  }
+}
+
+export async function GET(req: NextRequest) {
+  const secCode = req.nextUrl.searchParams.get("secCode");
+  if (!secCode || !/^\d{4}$/.test(secCode)) {
+    return NextResponse.json({ error: "Invalid secCode" }, { status: 400 });
+  }
+
+  const empty = {
+    secCode,
+    currentPrice: null,
+    per: null,
+    pbr: null,
+    dividendYield: null,
+    industry: null,
+  };
+
+  try {
+    const ticker = `${secCode}.T`;
+    const auth = await getAuth();
+
+    const qs = new URLSearchParams({ symbols: ticker });
+    if (auth) qs.set("crumb", auth.crumb);
+
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?${qs}`,
+      {
+        headers: {
+          "User-Agent": UA,
+          Accept: "application/json",
+          ...(auth ? { Cookie: auth.cookie } : {}),
+        },
+      }
+    );
+
+    if (!res.ok) return NextResponse.json(empty);
+
+    const json = await res.json();
+    const q = json?.quoteResponse?.result?.[0];
+    if (!q) return NextResponse.json(empty);
+
+    // quoteから業種が取れない場合はassetProfileから取得
+    let industry: string | null = q.industry ?? null;
+    if (!industry && auth) {
+      try {
+        const profileQs = new URLSearchParams({
+          modules: "assetProfile",
+          crumb: auth.crumb,
+        });
+        const profileRes = await fetch(
+          `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?${profileQs}`,
+          {
+            headers: {
+              "User-Agent": UA,
+              Accept: "application/json",
+              Cookie: auth.cookie,
+            },
+          }
+        );
+        if (profileRes.ok) {
+          const profileJson = await profileRes.json();
+          industry =
+            profileJson?.quoteSummary?.result?.[0]?.assetProfile?.industry ??
+            null;
+        }
+      } catch {
+        // assetProfile取得失敗は無視
+      }
+    }
+
+    return NextResponse.json({
+      secCode,
+      currentPrice: q.regularMarketPrice ?? null,
+      per:
+        q.trailingPE != null ? Math.round(q.trailingPE * 10) / 10 : null,
+      pbr:
+        q.priceToBook != null ? Math.round(q.priceToBook * 100) / 100 : null,
+      dividendYield:
+        q.trailingAnnualDividendYield != null
+          ? Math.round(q.trailingAnnualDividendYield * 10000) / 100
+          : null,
+      industry: toJaIndustry(industry),
+    });
+  } catch {
+    return NextResponse.json(empty);
+  }
+}
