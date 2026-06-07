@@ -52,16 +52,16 @@ export default function MarketDataTable({ companies, marketData }: Props) {
             <TableHead className="font-semibold whitespace-nowrap">証券コード</TableHead>
             <TableHead className="font-semibold">会社名</TableHead>
             <TableHead className="font-semibold">業種</TableHead>
-            <TableHead className="text-right font-semibold whitespace-nowrap bg-amber-100/60 dark:bg-amber-900/30">
+            <TableHead className="text-right font-semibold whitespace-nowrap bg-amber-100/60 dark:bg-amber-800/40">
               株価（円）
             </TableHead>
-            <TableHead className="text-right font-semibold whitespace-nowrap bg-orange-100/60 dark:bg-orange-900/30">
+            <TableHead className="text-right font-semibold whitespace-nowrap bg-orange-100/60 dark:bg-orange-800/40">
               PER
             </TableHead>
-            <TableHead className="text-right font-semibold whitespace-nowrap bg-rose-100/60 dark:bg-rose-900/30">
+            <TableHead className="text-right font-semibold whitespace-nowrap bg-rose-100/60 dark:bg-rose-800/40">
               PBR
             </TableHead>
-            <TableHead className="text-right font-semibold whitespace-nowrap bg-teal-100/60 dark:bg-teal-900/30">
+            <TableHead className="text-right font-semibold whitespace-nowrap bg-teal-100/60 dark:bg-teal-800/40">
               配当利回り
             </TableHead>
           </TableRow>
@@ -86,7 +86,7 @@ export default function MarketDataTable({ companies, marketData }: Props) {
                     d.industry ?? "—"
                   )}
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-sm bg-amber-50/40 dark:bg-amber-950/20">
+                <TableCell className="text-right font-mono tabular-nums text-sm bg-amber-50/40 dark:bg-amber-900/20">
                   <Val
                     value={d?.currentPrice}
                     decimals={0}
@@ -94,13 +94,13 @@ export default function MarketDataTable({ companies, marketData }: Props) {
                     loading={loading}
                   />
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-sm bg-orange-50/40 dark:bg-orange-950/20">
+                <TableCell className="text-right font-mono tabular-nums text-sm bg-orange-50/40 dark:bg-orange-900/20">
                   <Val value={d?.per} decimals={1} suffix=" 倍" loading={loading} />
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-sm bg-rose-50/40 dark:bg-rose-950/20">
+                <TableCell className="text-right font-mono tabular-nums text-sm bg-rose-50/40 dark:bg-rose-900/20">
                   <Val value={d?.pbr} decimals={2} suffix=" 倍" loading={loading} />
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums text-sm bg-teal-50/40 dark:bg-teal-950/20">
+                <TableCell className="text-right font-mono tabular-nums text-sm bg-teal-50/40 dark:bg-teal-900/20">
                   <Val
                     value={d?.dividendYield}
                     decimals={2}

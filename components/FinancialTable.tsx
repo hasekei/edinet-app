@@ -48,17 +48,17 @@ function formatJPY(v: number | null | undefined): { text: string; negative: bool
 
 // 利益系セルの背景色（列インデックスに応じた薄い背景）
 const COL_BG = [
-  "bg-blue-50/40 dark:bg-blue-950/20",   // 売上高
-  "bg-purple-50/40 dark:bg-purple-950/20", // 営業利益
-  "bg-indigo-50/40 dark:bg-indigo-950/20", // 経常利益
-  "bg-emerald-50/40 dark:bg-emerald-950/20", // 純利益
+  "bg-blue-50/40 dark:bg-blue-900/25",
+  "bg-purple-50/40 dark:bg-purple-900/25",
+  "bg-indigo-50/40 dark:bg-indigo-900/25",
+  "bg-emerald-50/40 dark:bg-emerald-900/25",
 ];
 
 const COL_HEAD_BG = [
-  "bg-blue-100/60 dark:bg-blue-900/30",
-  "bg-purple-100/60 dark:bg-purple-900/30",
-  "bg-indigo-100/60 dark:bg-indigo-900/30",
-  "bg-emerald-100/60 dark:bg-emerald-900/30",
+  "bg-blue-100/60 dark:bg-blue-800/40",
+  "bg-purple-100/60 dark:bg-purple-800/40",
+  "bg-indigo-100/60 dark:bg-indigo-800/40",
+  "bg-emerald-100/60 dark:bg-emerald-800/40",
 ];
 
 function NumCell({ value, colIdx }: { value: number | null | undefined; colIdx: number }) {

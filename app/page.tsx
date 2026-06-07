@@ -205,14 +205,16 @@ export default function Home() {
   return (
     <main className="max-w-5xl mx-auto px-4 py-10 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">EDINET 財務データ抽出ツール</h1>
+        <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-300 via-cyan-200 to-blue-300 bg-clip-text text-transparent">
+          EDINET 財務データ抽出ツール
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           証券コードまたは会社名を入力してEDINETから財務データを取得します
         </p>
       </div>
 
       {/* 単一検索 */}
-      <section className="rounded-lg border p-5 space-y-4">
+      <section className="rounded-lg border bg-card p-5 space-y-4">
         <h2 className="font-semibold">単一企業検索</h2>
 
         <div className="space-y-1">
@@ -252,7 +254,7 @@ export default function Home() {
       </section>
 
       {/* 一括処理 */}
-      <section className="rounded-lg border p-5 space-y-4">
+      <section className="rounded-lg border bg-card p-5 space-y-4">
         <h2 className="font-semibold">一括処理（最大50社）</h2>
 
         <div className="space-y-1">
