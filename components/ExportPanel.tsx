@@ -12,6 +12,7 @@ interface Props {
 
 export default function ExportPanel({ rows }: Props) {
   const [loading, setLoading] = useState<"csv" | "excel" | "sheets" | null>(null);
+  const [sheetsUrl, setSheetsUrl] = useState<string | null>(null);
 
   if (rows.length === 0) return null;
 
@@ -43,10 +44,11 @@ export default function ExportPanel({ rows }: Props) {
 
   async function handleGoogleSheets() {
     setLoading("sheets");
+    setSheetsUrl(null);
     try {
       const token = await getGoogleAccessToken();
       const url = await createGoogleSpreadsheet(rows, token);
-      window.open(url, "_blank");
+      setSheetsUrl(url);
       toast.success("Googleスプレッドシートを作成しました");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラーが発生しました");
@@ -56,28 +58,44 @@ export default function ExportPanel({ rows }: Props) {
   }
 
   return (
-    <div className="flex flex-wrap gap-3">
-      <Button
-        variant="outline"
-        onClick={() => handleExport("csv")}
-        disabled={loading !== null}
-      >
-        {loading === "csv" ? "処理中..." : "CSV ダウンロード"}
-      </Button>
-      <Button
-        onClick={() => handleExport("excel")}
-        disabled={loading !== null}
-      >
-        {loading === "excel" ? "処理中..." : "Excel ダウンロード"}
-      </Button>
-      <Button
-        variant="outline"
-        onClick={handleGoogleSheets}
-        disabled={loading !== null}
-        className="border-green-500/50 text-green-400 hover:bg-green-500/10 dark:border-green-500/40 dark:text-green-400"
-      >
-        {loading === "sheets" ? "作成中..." : "Google スプレッドシート"}
-      </Button>
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-3">
+        <Button
+          variant="outline"
+          onClick={() => handleExport("csv")}
+          disabled={loading !== null}
+        >
+          {loading === "csv" ? "処理中..." : "CSV ダウンロード"}
+        </Button>
+        <Button
+          onClick={() => handleExport("excel")}
+          disabled={loading !== null}
+        >
+          {loading === "excel" ? "処理中..." : "Excel ダウンロード"}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleGoogleSheets}
+          disabled={loading !== null}
+          className="border-green-500/50 text-green-400 hover:bg-green-500/10 dark:border-green-500/40 dark:text-green-400"
+        >
+          {loading === "sheets" ? "作成中..." : "Google スプレッドシート"}
+        </Button>
+      </div>
+
+      {sheetsUrl && (
+        <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">スプレッドシートを作成しました:</span>
+          <a
+            href={sheetsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-green-400 underline underline-offset-2 hover:text-green-300"
+          >
+            開く →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

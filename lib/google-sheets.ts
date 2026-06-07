@@ -95,6 +95,37 @@ function formatRow(d: ExportRow): CellValue[] {
   ];
 }
 
+function sheetsErrorMessage(status: number, body: { error?: { message?: string } }): string {
+  const detail = body?.error?.message;
+  if (status === 401) return `認証エラー: アクセストークンが無効です。再度ボタンを押してください`;
+  if (status === 403) {
+    if (detail?.includes("disabled")) return "Google Sheets API が無効です。Google Cloud Console で Sheets API を有効にしてください";
+    if (detail?.includes("PERMISSION_DENIED") || detail?.includes("insufficientPermissions"))
+      return "権限不足。スコープ spreadsheets が付与されているか確認してください";
+    return `アクセス拒否 (403): ${detail ?? "権限がありません"}`;
+  }
+  return detail ?? `スプレッドシート作成失敗 (HTTP ${status})`;
+}
+
+async function sheetsPost(url: string, accessToken: string, body: unknown): Promise<Response> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    return res;
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("Sheets API がタイムアウトしました (30秒)。ネットワークを確認してください");
+    throw e;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 export async function createGoogleSpreadsheet(
   rows: ExportRow[],
   accessToken: string
@@ -106,18 +137,18 @@ export async function createGoogleSpreadsheet(
 
   const rowData = [rowValues(HEADERS), ...rows.map((r) => rowValues(formatRow(r)))];
 
-  const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const createRes = await sheetsPost(
+    "https://sheets.googleapis.com/v4/spreadsheets",
+    accessToken,
+    {
       properties: { title },
       sheets: [{ properties: { title: "財務データ" }, data: [{ startRow: 0, startColumn: 0, rowData }] }],
-    }),
-  });
+    }
+  );
 
   if (!createRes.ok) {
     const err = await createRes.json().catch(() => ({}));
-    throw new Error((err as { error?: { message?: string } })?.error?.message ?? "スプレッドシート作成失敗");
+    throw new Error(sheetsErrorMessage(createRes.status, err));
   }
 
   const created = await createRes.json();
@@ -125,10 +156,10 @@ export async function createGoogleSpreadsheet(
   const sheetId: number = created.sheets?.[0]?.properties?.sheetId ?? 0;
 
   // ヘッダー装飾・列幅自動調整・先頭行固定
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
+  await sheetsPost(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+    accessToken,
+    {
       requests: [
         {
           repeatCell: {
@@ -155,8 +186,8 @@ export async function createGoogleSpreadsheet(
           },
         },
       ],
-    }),
-  });
+    }
+  );
 
   return `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
 }
