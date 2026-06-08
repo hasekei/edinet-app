@@ -74,10 +74,9 @@ export default function ExportPanel({ rows }: Props) {
           {loading === "excel" ? "処理中..." : "Excel ダウンロード"}
         </Button>
         <Button
-          variant="outline"
           onClick={handleGoogleSheets}
           disabled={loading !== null}
-          className="border-green-500/50 text-green-400 hover:bg-green-500/10 dark:border-green-500/40 dark:text-green-400"
+          className="bg-green-600 hover:bg-green-700 text-white"
         >
           {loading === "sheets" ? "作成中..." : "Google スプレッドシート"}
         </Button>
