@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { ExportRow } from "@/types/financial";
-import { getGoogleAccessToken, createGoogleSpreadsheet } from "@/lib/google-sheets";
 
 interface Props {
   rows: ExportRow[];
@@ -46,9 +45,14 @@ export default function ExportPanel({ rows }: Props) {
     setLoading("sheets");
     setSheetsUrl(null);
     try {
-      const token = await getGoogleAccessToken();
-      const url = await createGoogleSpreadsheet(rows, token);
-      setSheetsUrl(url);
+      const res = await fetch("/api/sheets-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `エラー (HTTP ${res.status})`);
+      setSheetsUrl(data.url);
       toast.success("Googleスプレッドシートを作成しました");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラーが発生しました");
