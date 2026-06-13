@@ -130,14 +130,25 @@ export default function FinancialTable({ results }: Props) {
                 {d.companyName}
               </TableCell>
               <TableCell className="text-sm whitespace-nowrap">{d.periodEnd}</TableCell>
-              <TableCell>
+              <TableCell className="whitespace-nowrap space-x-1">
                 <Badge variant={d.isConsolidated ? "default" : "secondary"} className="text-xs">
                   {d.isConsolidated ? "連結" : "単体"}
                 </Badge>
+                {d.accountingStandard !== "JGAAP" && d.accountingStandard !== "Unknown" && (
+                  <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">
+                    {d.accountingStandard}
+                  </Badge>
+                )}
               </TableCell>
               <NumCell value={d.netSales} colIdx={0} />
               <NumCell value={d.operatingIncome} colIdx={1} />
-              <NumCell value={d.ordinaryIncome} colIdx={2} />
+              {d.accountingStandard === "IFRS" || d.accountingStandard === "US_GAAP" ? (
+                <TableCell className={["text-right text-sm tabular-nums", COL_BG[2]].join(" ")}>
+                  <span className="text-muted-foreground text-xs">— ({d.accountingStandard})</span>
+                </TableCell>
+              ) : (
+                <NumCell value={d.ordinaryIncome} colIdx={2} />
+              )}
               <NumCell value={d.netIncome} colIdx={3} />
             </TableRow>
           ))}
