@@ -2,24 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import type { ExportRow } from "@/types/financial";
 
+// 列インデックス (0-based)
+const COL_PRICE = 3;          // 前日終値
+const COL_MONEY_START = 9;    // 売上高
+const COL_MONEY_END = 12;     // 最終利益まで (exclusive)
+const COL_PER_SHARE_START = 12; // 1株利益
+const COL_PER_SHARE_END = 14;   // 1株配当まで (exclusive)
+
 const HEADERS = [
-  "証券コード", "銘柄名", "業種", "前日終値", "PER", "PBR",
-  "配当利回り(%)", "信用倍率", "決算期", "売上高", "経常利益",
-  "最終利益", "1株利益", "1株配当", "発表日",
+  "証券コード", "銘柄名", "業種", "前日終値(円)", "PER", "PBR",
+  "配当利回り(%)", "信用倍率", "決算期", "売上高(億円)", "経常利益(億円)",
+  "最終利益(億円)", "1株利益(円)", "1株配当(円)", "発表日",
 ];
 
-function formatRow(d: ExportRow): (string | number | null)[] {
-  return [
-    d.secCode ?? "", d.companyName ?? "", d.industry ?? "",
-    d.currentPrice ?? "", d.per ?? "", d.pbr ?? "", d.dividendYield ?? "", d.marginRatio ?? "",
-    d.periodEnd ?? "", d.netSales ?? "", d.ordinaryIncome ?? "", d.netIncome ?? "",
-    d.eps ?? "", d.dps ?? "",
-    d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
-  ];
+function toOku(v: number | null | undefined): number | "" {
+  if (v == null) return "";
+  return Math.round(v / 100); // 百万円 → 億円
 }
 
-function toStringValues(row: (string | number | null)[]): string[] {
-  return row.map((v) => (v === null || v === undefined ? "" : String(v)));
+function formatRow(d: ExportRow): (string | number)[] {
+  return [
+    d.secCode ?? "",
+    d.companyName ?? "",
+    d.industry ?? "",
+    d.currentPrice ?? "",
+    d.per ?? "",
+    d.pbr ?? "",
+    d.dividendYield ?? "",
+    d.marginRatio ?? "",
+    d.periodEnd ?? "",
+    toOku(d.netSales),
+    toOku(d.ordinaryIncome),
+    toOku(d.netIncome),
+    d.eps ?? "",
+    d.dps ?? "",
+    d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
+  ];
 }
 
 function buildAuth(raw: string) {
@@ -46,7 +64,7 @@ export async function POST(req: NextRequest) {
   const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID?.replace(/^﻿/, "").trim();
   if (!spreadsheetId) {
     return NextResponse.json(
-      { error: "GOOGLE_SPREADSHEET_ID が未設定です。スプレッドシートを作成してサービスアカウントに共有してください。" },
+      { error: "GOOGLE_SPREADSHEET_ID が未設定です。" },
       { status: 500 }
     );
   }
@@ -88,10 +106,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Step 2: データを書き込み ────────────────────────────────────────
-  const values = [
-    HEADERS,
-    ...rows.map((r) => toStringValues(formatRow(r))),
-  ];
+  const values = [HEADERS, ...rows.map(formatRow)];
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -105,12 +120,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `データ書き込み失敗: ${detail}` }, { status: 500 });
   }
 
-  // ── Step 3: ヘッダー装飾 ───────────────────────────────────────────
+  // ── Step 3: 書式設定 ───────────────────────────────────────────────
+  const dataRows = rows.length;
   try {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: {
         requests: [
+          // ヘッダー装飾
           {
             repeatCell: {
               range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1 },
@@ -124,11 +141,37 @@ export async function POST(req: NextRequest) {
               fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
             },
           },
+          // 前日終値: #,##0"円"
+          {
+            repeatCell: {
+              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: COL_PRICE, endColumnIndex: COL_PRICE + 1 },
+              cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: '#,##0"円"' } } },
+              fields: "userEnteredFormat.numberFormat",
+            },
+          },
+          // 売上高・経常利益・最終利益: #,##0"億円"
+          {
+            repeatCell: {
+              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: COL_MONEY_START, endColumnIndex: COL_MONEY_END },
+              cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: '#,##0"億円"' } } },
+              fields: "userEnteredFormat.numberFormat",
+            },
+          },
+          // 1株利益・1株配当: #,##0.0"円"
+          {
+            repeatCell: {
+              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: COL_PER_SHARE_START, endColumnIndex: COL_PER_SHARE_END },
+              cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: '#,##0.0"円"' } } },
+              fields: "userEnteredFormat.numberFormat",
+            },
+          },
+          // 列幅自動調整
           {
             autoResizeDimensions: {
               dimensions: { sheetId: newSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: HEADERS.length },
             },
           },
+          // 1行目固定
           {
             updateSheetProperties: {
               properties: { sheetId: newSheetId, gridProperties: { frozenRowCount: 1 } },
