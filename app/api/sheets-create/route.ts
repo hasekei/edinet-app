@@ -146,6 +146,14 @@ export async function POST(req: NextRequest) {
     .replace(/\//g, "-");
 
   // ── Step 1: Drive API でスプレッドシートを作成 ───────────────────────
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!folderId) {
+    return NextResponse.json(
+      { error: "GOOGLE_DRIVE_FOLDER_ID が未設定です。Google Drive のフォルダをサービスアカウントに共有してください。" },
+      { status: 500 }
+    );
+  }
+
   let spreadsheetId: string;
   const sheetId = 0;
   try {
@@ -153,6 +161,7 @@ export async function POST(req: NextRequest) {
       requestBody: {
         name: `財務データ_${today}`,
         mimeType: "application/vnd.google-apps.spreadsheet",
+        parents: [folderId],
       },
       fields: "id",
     });
