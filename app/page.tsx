@@ -118,18 +118,28 @@ export default function Home() {
     return [];
   });
 
+  // 証券コードごとに最新1件（periodEnd降順先頭）のFinancialDataを返す
+  const latestFinancials: Record<string, import("@/types/financial").FinancialData> = {};
+  for (const row of doneRows) {
+    if (!latestFinancials[row.secCode]) latestFinancials[row.secCode] = row;
+  }
+
   const exportRows: ExportRow[] = doneRows.map((d) => {
     const m = marketData[d.secCode];
     const f = forecastData[d.secCode];
     const tp = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
+    const price = m?.currentPrice ?? null;
+    const per = price && d.eps && d.eps > 0 ? Math.round(price / d.eps * 10) / 10 : null;
+    const pbr = price && f?.bps && f.bps > 0 ? Math.round(price / f.bps * 100) / 100 : null;
+    const dividendYield = price && d.dps != null && d.dps >= 0 ? Math.round(d.dps / price * 10000) / 100 : null;
     return {
       secCode: d.secCode,
       companyName: d.companyName,
       industry: m?.industry ?? null,
-      currentPrice: m?.currentPrice ?? null,
-      per: m?.per ?? null,
-      pbr: m?.pbr ?? null,
-      dividendYield: m?.dividendYield ?? null,
+      currentPrice: price,
+      per,
+      pbr,
+      dividendYield,
       marginRatio: m?.marginRatio ?? null,
       periodEnd: d.periodEnd,
       netSales: d.netSales,
@@ -362,6 +372,8 @@ export default function Home() {
                 ).values(),
               ]}
               marketData={marketData}
+              latestFinancials={latestFinancials}
+              forecastData={forecastData}
             />
           </div>
           <div className="space-y-3">

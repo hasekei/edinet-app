@@ -8,11 +8,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { MarketData } from "@/types/financial";
+import type { MarketData, FinancialData, ForecastData } from "@/types/financial";
 
 interface Props {
   companies: Array<{ secCode: string; companyName?: string }>;
   marketData: Record<string, MarketData>;
+  latestFinancials: Record<string, FinancialData>;
+  forecastData: Record<string, ForecastData>;
 }
 
 function Val({
@@ -41,7 +43,32 @@ function Val({
   );
 }
 
-export default function MarketDataTable({ companies, marketData }: Props) {
+function calcMetrics(
+  currentPrice: number | null,
+  fin: FinancialData | undefined,
+  forecast: ForecastData | undefined,
+) {
+  if (!currentPrice || currentPrice <= 0) return { per: null, pbr: null, dividendYield: null };
+
+  const per =
+    fin?.eps && fin.eps > 0
+      ? Math.round((currentPrice / fin.eps) * 10) / 10
+      : null;
+
+  const pbr =
+    forecast?.bps && forecast.bps > 0
+      ? Math.round((currentPrice / forecast.bps) * 100) / 100
+      : null;
+
+  const dividendYield =
+    fin?.dps != null && fin.dps >= 0
+      ? Math.round((fin.dps / currentPrice) * 10000) / 100
+      : null;
+
+  return { per, pbr, dividendYield };
+}
+
+export default function MarketDataTable({ companies, marketData, latestFinancials, forecastData }: Props) {
   if (companies.length === 0) return null;
 
   return (
@@ -70,6 +97,11 @@ export default function MarketDataTable({ companies, marketData }: Props) {
           {companies.map(({ secCode, companyName }) => {
             const d = marketData[secCode];
             const loading = !d;
+            const { per, pbr, dividendYield } = calcMetrics(
+              d?.currentPrice ?? null,
+              latestFinancials[secCode],
+              forecastData[secCode],
+            );
             return (
               <TableRow
                 key={secCode}
@@ -87,26 +119,16 @@ export default function MarketDataTable({ companies, marketData }: Props) {
                   )}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm bg-amber-50/40 dark:bg-amber-900/20">
-                  <Val
-                    value={d?.currentPrice}
-                    decimals={0}
-                    suffix=" 円"
-                    loading={loading}
-                  />
+                  <Val value={d?.currentPrice} decimals={0} suffix=" 円" loading={loading} />
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm bg-orange-50/40 dark:bg-orange-900/20">
-                  <Val value={d?.per} decimals={1} suffix=" 倍" loading={loading} />
+                  <Val value={per} decimals={1} suffix=" 倍" loading={loading} />
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm bg-rose-50/40 dark:bg-rose-900/20">
-                  <Val value={d?.pbr} decimals={2} suffix=" 倍" loading={loading} />
+                  <Val value={pbr} decimals={2} suffix=" 倍" loading={loading} />
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm bg-teal-50/40 dark:bg-teal-900/20">
-                  <Val
-                    value={d?.dividendYield}
-                    decimals={2}
-                    suffix="%"
-                    loading={loading}
-                  />
+                  <Val value={dividendYield} decimals={2} suffix="%" loading={loading} />
                 </TableCell>
               </TableRow>
             );
@@ -114,7 +136,7 @@ export default function MarketDataTable({ companies, marketData }: Props) {
         </TableBody>
       </Table>
       <p className="px-4 py-2 text-xs text-muted-foreground border-t">
-        ※ 市場データはYahoo Financeより取得（遅延あり）。PER・PBRは過去12ヶ月ベース。業種はJPX 33業種区分。
+        ※ 株価はYahoo Financeより取得（遅延あり）。PER・PBR・配当利回りは前日終値 × EDINETの実績EPS/BPS/DPSで算出。業種はJPX 33業種区分。
       </p>
     </div>
   );
