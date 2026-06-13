@@ -34,20 +34,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "GOOGLE_SERVICE_ACCOUNT_JSON が未設定です" }, { status: 500 });
   }
 
-  let credentials: object;
+  let clientEmail: string;
+  let privateKey: string;
   try {
-    credentials = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as { client_email: string; private_key: string };
+    clientEmail = parsed.client_email;
+    // Vercel env var でエスケープされた \n を実際の改行に戻す
+    privateKey = parsed.private_key.replace(/\\n/g, "\n");
   } catch (e) {
     return NextResponse.json({ error: `JSON解析失敗: ${e}` }, { status: 500 });
   }
 
-  const auth = new google.auth.GoogleAuth({
-    credentials,
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
     scopes: [
       "https://www.googleapis.com/auth/spreadsheets",
       "https://www.googleapis.com/auth/drive",
     ],
   });
+
+  try {
+    await auth.authorize();
+  } catch (e) {
+    return NextResponse.json({ error: `JWT認証失敗: ${e}` }, { status: 500 });
+  }
 
   const sheets = google.sheets({ version: "v4", auth });
   const drive = google.drive({ version: "v3", auth });
