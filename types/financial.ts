@@ -80,4 +80,12 @@ export interface ExportRow {
   forecastOrdinaryIncome: number | null;
   bps: number | null;
   equityRatio: number | null;
+  sharesEstimate: number | null;
+  calcEps: number | null;
+  equityRatioPct: number | null;
+  roa: number | null;
+  leverage: number | null;
+  discountRate: number | null;
+  businessValue: number | null;
+  assetValue: number | null;
 }

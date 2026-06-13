@@ -155,7 +155,8 @@ export default function FinancialTable({ results, forecastData, marketData }: Pr
           {rows.map((d, i) => {
             const f = forecastData[d.secCode];
             const m = marketData[d.secCode];
-            const theoreticalPrice = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
+            const tpResult = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
+            const theoreticalPrice = tpResult?.price ?? null;
             const forecastLoading = !f;
 
             return (

@@ -121,7 +121,7 @@ export default function Home() {
   const exportRows: ExportRow[] = doneRows.map((d) => {
     const m = marketData[d.secCode];
     const f = forecastData[d.secCode];
-    const theoreticalPrice = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
+    const tp = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
     return {
       secCode: d.secCode,
       companyName: d.companyName,
@@ -138,10 +138,18 @@ export default function Home() {
       eps: d.eps,
       dps: d.dps,
       submitDateTime: d.submitDateTime ?? null,
-      theoreticalPrice,
       forecastOrdinaryIncome: f?.forecastOrdinaryIncome ?? null,
       bps: f?.bps ?? null,
       equityRatio: f?.equityRatio ?? null,
+      sharesEstimate: tp?.sharesEstimate ?? null,
+      calcEps: tp?.calcEps ?? null,
+      equityRatioPct: tp?.equityRatioPct ?? null,
+      roa: tp?.roa ?? null,
+      leverage: tp?.leverage ?? null,
+      discountRate: tp?.discountRate ?? null,
+      businessValue: tp?.businessValue ?? null,
+      assetValue: tp?.assetValue ?? null,
+      theoreticalPrice: tp?.price ?? null,
     };
   });
 

@@ -16,10 +16,18 @@ const HEADERS = [
   "1株利益",
   "1株配当",
   "発表日",
-  "理論株価",
+  // 理論株価 計算過程
   "予想経常利益",
   "BPS",
   "自己資本比率(%)",
+  "発行済株式数（推計）",
+  "計算用EPS",
+  "ROA",
+  "財務レバレッジ補正",
+  "割引評価率",
+  "事業価値",
+  "資産価値",
+  "理論株価",
 ];
 
 function formatRow(d: ExportRow): (string | number | null)[] {
@@ -38,15 +46,18 @@ function formatRow(d: ExportRow): (string | number | null)[] {
     d.eps,
     d.dps,
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
-    d.theoreticalPrice,
+    // 理論株価 計算過程
     d.forecastOrdinaryIncome,
     d.bps,
-    // 自己資本比率: 小数(0.35)の場合はパーセント表記(35.0)に変換
-    d.equityRatio != null
-      ? d.equityRatio <= 1
-        ? Math.round(d.equityRatio * 1000) / 10
-        : Math.round(d.equityRatio * 10) / 10
-      : null,
+    d.equityRatioPct,
+    d.sharesEstimate,
+    d.calcEps,
+    d.roa,
+    d.leverage,
+    d.discountRate,
+    d.businessValue,
+    d.assetValue,
+    d.theoreticalPrice,
   ];
 }
 
@@ -81,14 +92,21 @@ export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
   }
 
   // 列幅・数値書式
-  // 列: 1=コード 2=名 3=業種 4=終値 5=PER 6=PBR 7=利回 8=決算期 9=売上 10=経常 11=純利 12=EPS 13=DPS 14=発表 15=理論株価 16=予想経常 17=BPS 18=自己資本比率
-  const numericCols = [4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16, 17, 18];
+  // 列: 1=コード 2=名 3=業種 4=終値 5=PER 6=PBR 7=利回 8=決算期
+  //     9=売上 10=経常 11=純利 12=EPS 13=DPS 14=発表
+  //     15=予想経常 16=BPS 17=自己資本比率 18=株式数推計 19=計算EPS
+  //     20=ROA 21=財務レバレッジ 22=割引評価率 23=事業価値 24=資産価値 25=理論株価
+  const numericCols = [4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
   ws.columns.forEach((col, idx) => {
     const colNo = idx + 1;
     col.width = colNo === 2 ? 28 : colNo === 3 ? 18 : 14;
     if (numericCols.includes(colNo)) {
       col.alignment = { horizontal: "right" };
-      if ([4, 9, 10, 11, 12, 13, 15, 16, 17].includes(colNo)) {
+      // 小数4桁 (ROA, 割引評価率, 財務レバレッジ)
+      if ([20, 21, 22].includes(colNo)) {
+        col.numFmt = "#,##0.0000";
+      // 整数系
+      } else if ([4, 9, 10, 11, 12, 13, 15, 16, 18, 19, 23, 24, 25].includes(colNo)) {
         col.numFmt = "#,##0.##";
       } else {
         col.numFmt = "#,##0.00";
