@@ -160,15 +160,20 @@ export async function POST(req: NextRequest) {
   // ── Step 3: 書式設定 ───────────────────────────────────────────────
   const dataRows = rows.length;
   const totalCols = HEADERS.length;
+  const calcStartCol = 14; // 「予想経常利益」以降
   try {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: {
         requests: [
-          // ヘッダー背景・太字・白文字・中央揃え
+          // ヘッダー（主要列 0-13）: 濃い紺色
           {
             repeatCell: {
-              range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1 },
+              range: {
+                sheetId: newSheetId,
+                startRowIndex: 0, endRowIndex: 1,
+                startColumnIndex: 0, endColumnIndex: calcStartCol,
+              },
               cell: {
                 userEnteredFormat: {
                   backgroundColor: { red: 0.122, green: 0.22, blue: 0.392 },
@@ -179,7 +184,25 @@ export async function POST(req: NextRequest) {
               fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
             },
           },
-          // データ行（数値列）右揃え: 前日終値〜理論株価(col3〜24)
+          // ヘッダー（理論株価計算列 14-24）: 濃いアンバー
+          {
+            repeatCell: {
+              range: {
+                sheetId: newSheetId,
+                startRowIndex: 0, endRowIndex: 1,
+                startColumnIndex: calcStartCol, endColumnIndex: totalCols,
+              },
+              cell: {
+                userEnteredFormat: {
+                  backgroundColor: { red: 0.537, green: 0.329, blue: 0.012 },
+                  textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+                  horizontalAlignment: "CENTER",
+                },
+              },
+              fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
+            },
+          },
+          // データ行（数値列）右揃え
           {
             repeatCell: {
               range: {
@@ -191,20 +214,38 @@ export async function POST(req: NextRequest) {
               fields: "userEnteredFormat.horizontalAlignment",
             },
           },
-          // 理論株価計算列（14列目以降）に薄い黄色背景
+          // 理論株価計算列データ行のみ薄い黄色背景（ヘッダーは除く）
+          {
+            repeatCell: {
+              range: {
+                sheetId: newSheetId,
+                startRowIndex: 1, endRowIndex: dataRows + 1,
+                startColumnIndex: calcStartCol, endColumnIndex: totalCols,
+              },
+              cell: {
+                userEnteredFormat: {
+                  backgroundColor: { red: 1, green: 0.976, blue: 0.863 },
+                },
+              },
+              fields: "userEnteredFormat.backgroundColor",
+            },
+          },
+          // 計算列の左端に太い縦線（セクション区切り）
           {
             repeatCell: {
               range: {
                 sheetId: newSheetId,
                 startRowIndex: 0, endRowIndex: dataRows + 1,
-                startColumnIndex: 14, endColumnIndex: totalCols,
+                startColumnIndex: calcStartCol, endColumnIndex: calcStartCol + 1,
               },
               cell: {
                 userEnteredFormat: {
-                  backgroundColor: { red: 1, green: 0.988, blue: 0.878 },
+                  borders: {
+                    left: { style: "MEDIUM", color: { red: 0.537, green: 0.329, blue: 0.012 } },
+                  },
                 },
               },
-              fields: "userEnteredFormat.backgroundColor",
+              fields: "userEnteredFormat.borders.left",
             },
           },
           // 全列幅を設定
