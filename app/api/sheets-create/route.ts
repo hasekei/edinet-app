@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
     .replace(/\//g, "-");
 
   // ── Step 1: Drive API でスプレッドシートを作成 ───────────────────────
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.replace(/^﻿/, "").trim();
   if (!folderId) {
     return NextResponse.json(
       { error: "GOOGLE_DRIVE_FOLDER_ID が未設定です。Google Drive のフォルダをサービスアカウントに共有してください。" },
