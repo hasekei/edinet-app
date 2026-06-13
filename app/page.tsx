@@ -192,8 +192,8 @@ export default function Home() {
       toast.error("有効な4桁の証券コードが見つかりません");
       return;
     }
-    if (codes.length > 50) {
-      toast.error("一度に処理できるのは50社までです");
+    if (codes.length > 70) {
+      toast.error("一度に処理できるのは70社までです");
       return;
     }
     if (batchUseRange && batchFromYear > batchToYear) {
@@ -284,7 +284,7 @@ export default function Home() {
 
       {/* 一括処理 */}
       <section className="rounded-lg border bg-card p-5 space-y-4">
-        <h2 className="font-semibold">一括処理（最大50社）</h2>
+        <h2 className="font-semibold">一括処理（最大70社）</h2>
 
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">
