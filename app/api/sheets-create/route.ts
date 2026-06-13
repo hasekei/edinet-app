@@ -8,25 +8,18 @@ const HEADERS = [
   "最終利益", "1株利益", "1株配当", "発表日",
 ];
 
-type CellValue = string | number | null;
-
-function cell(v: CellValue) {
-  if (v === null || v === undefined || v === "") return { userEnteredValue: { stringValue: "" } };
-  if (typeof v === "number") return { userEnteredValue: { numberValue: v } };
-  return { userEnteredValue: { stringValue: String(v) } };
-}
-
-function rowValues(cells: CellValue[]) {
-  return { values: cells.map(cell) };
-}
-
-function formatRow(d: ExportRow): CellValue[] {
+function formatRow(d: ExportRow): (string | number | null)[] {
   return [
-    d.secCode, d.companyName, d.industry ?? "",
-    d.currentPrice, d.per, d.pbr, d.dividendYield, d.marginRatio,
-    d.periodEnd, d.netSales, d.ordinaryIncome, d.netIncome, d.eps, d.dps,
+    d.secCode ?? "", d.companyName ?? "", d.industry ?? "",
+    d.currentPrice ?? "", d.per ?? "", d.pbr ?? "", d.dividendYield ?? "", d.marginRatio ?? "",
+    d.periodEnd ?? "", d.netSales ?? "", d.ordinaryIncome ?? "", d.netIncome ?? "",
+    d.eps ?? "", d.dps ?? "",
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
   ];
+}
+
+function toStringValues(row: (string | number | null)[]): string[] {
+  return row.map((v) => (v === null || v === undefined ? "" : String(v)));
 }
 
 export async function POST(req: NextRequest) {
@@ -44,50 +37,66 @@ export async function POST(req: NextRequest) {
   let credentials: object;
   try {
     credentials = JSON.parse(raw);
-  } catch {
-    return NextResponse.json({ error: "サービスアカウントJSONの解析に失敗しました" }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ error: `JSON解析失敗: ${e}` }, { status: 500 });
   }
 
   const auth = new google.auth.GoogleAuth({
     credentials,
     scopes: [
       "https://www.googleapis.com/auth/spreadsheets",
-      "https://www.googleapis.com/auth/drive.file",
+      "https://www.googleapis.com/auth/drive",
     ],
   });
 
-  const sheetsClient = google.sheets({ version: "v4", auth });
-  const driveClient = google.drive({ version: "v3", auth });
+  const sheets = google.sheets({ version: "v4", auth });
+  const drive = google.drive({ version: "v3", auth });
 
   const today = new Date()
     .toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" })
     .replace(/\//g, "-");
 
-  const rowData = [rowValues(HEADERS), ...rows.map((r) => rowValues(formatRow(r)))];
-
+  // ── Step 1: 空のスプレッドシートを作成 ──────────────────────────────
   let spreadsheetId: string;
   let sheetId: number;
-
   try {
-    const createRes = await sheetsClient.spreadsheets.create({
+    const createRes = await sheets.spreadsheets.create({
       requestBody: {
         properties: { title: `財務データ_${today}` },
-        sheets: [{
-          properties: { title: "財務データ" },
-          data: [{ startRow: 0, startColumn: 0, rowData }],
-        }],
       },
     });
     spreadsheetId = createRes.data.spreadsheetId!;
     sheetId = createRes.data.sheets?.[0]?.properties?.sheetId ?? 0;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: `スプレッドシート作成失敗: ${msg}` }, { status: 500 });
+  } catch (e: unknown) {
+    const err = e as { message?: string; response?: { status?: number; data?: unknown } };
+    const detail = JSON.stringify(err.response?.data ?? err.message ?? e);
+    return NextResponse.json(
+      { error: `スプレッドシート作成失敗 [${err.response?.status ?? "?"}]: ${detail}` },
+      { status: 500 }
+    );
   }
 
-  // ヘッダー装飾
+  // ── Step 2: データを書き込み ────────────────────────────────────────
+  const values = [
+    HEADERS,
+    ...rows.map((r) => toStringValues(formatRow(r))),
+  ];
   try {
-    await sheetsClient.spreadsheets.batchUpdate({
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: "A1",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values },
+    });
+  } catch (e: unknown) {
+    const err = e as { message?: string; response?: { data?: unknown } };
+    const detail = JSON.stringify(err.response?.data ?? err.message ?? e);
+    return NextResponse.json({ error: `データ書き込み失敗: ${detail}` }, { status: 500 });
+  }
+
+  // ── Step 3: ヘッダー装飾 ───────────────────────────────────────────
+  try {
+    await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: {
         requests: [
@@ -119,12 +128,12 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch {
-    // 装飾失敗は無視して続行
+    // 装飾失敗は無視
   }
 
-  // 「リンクを知っている全員が編集可能」に設定
+  // ── Step 4: 権限設定（誰でも編集可）──────────────────────────────
   try {
-    await driveClient.permissions.create({
+    await drive.permissions.create({
       fileId: spreadsheetId,
       requestBody: { role: "writer", type: "anyone" },
     });
