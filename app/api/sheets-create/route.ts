@@ -22,6 +22,84 @@ function toStringValues(row: (string | number | null)[]): string[] {
   return row.map((v) => (v === null || v === undefined ? "" : String(v)));
 }
 
+function buildAuth(raw: string) {
+  const parsed = JSON.parse(raw) as { client_email: string; private_key: string };
+  return new google.auth.JWT({
+    email: parsed.client_email,
+    key: parsed.private_key.replace(/\\n/g, "\n"),
+    scopes: [
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/drive",
+    ],
+  });
+}
+
+// 診断用エンドポイント: GET /api/sheets-create?dbg=1
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  if (searchParams.get("dbg") !== "1") {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return NextResponse.json({ env: "missing" });
+
+  const diag: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(raw) as { client_email: string; private_key: string };
+    diag.email = parsed.client_email;
+    diag.keyStart = parsed.private_key.slice(0, 40);
+  } catch (e) {
+    return NextResponse.json({ parse: String(e) });
+  }
+
+  let auth: ReturnType<typeof buildAuth>;
+  try {
+    auth = buildAuth(raw);
+    await auth.authorize();
+    diag.authorize = "OK";
+  } catch (e) {
+    diag.authorize = `FAIL: ${e}`;
+    return NextResponse.json(diag);
+  }
+
+  const drive = google.drive({ version: "v3", auth });
+  const sheets = google.sheets({ version: "v4", auth });
+
+  try {
+    const about = await drive.about.get({ fields: "user" });
+    diag.driveAbout = `OK: ${about.data.user?.emailAddress ?? "no email"}`;
+  } catch (e) {
+    const err = e as { response?: { status?: number; data?: unknown } };
+    diag.driveAbout = `FAIL [${err.response?.status}]: ${JSON.stringify(err.response?.data)}`;
+  }
+
+  try {
+    const res = await drive.files.create({
+      requestBody: { name: "diag-test", mimeType: "application/vnd.google-apps.spreadsheet" },
+      fields: "id",
+    });
+    diag.driveCreate = `OK: ${res.data.id}`;
+    // 作成できたら削除
+    await drive.files.delete({ fileId: res.data.id! }).catch(() => null);
+  } catch (e) {
+    const err = e as { response?: { status?: number; data?: unknown } };
+    diag.driveCreate = `FAIL [${err.response?.status}]: ${JSON.stringify(err.response?.data)}`;
+  }
+
+  try {
+    const res = await sheets.spreadsheets.create({
+      requestBody: { properties: { title: "diag-test" } },
+    });
+    diag.sheetsCreate = `OK: ${res.data.spreadsheetId}`;
+    await drive.files.delete({ fileId: res.data.spreadsheetId! }).catch(() => null);
+  } catch (e) {
+    const err = e as { response?: { status?: number; data?: unknown } };
+    diag.sheetsCreate = `FAIL [${err.response?.status}]: ${JSON.stringify(err.response?.data)}`;
+  }
+
+  return NextResponse.json(diag);
+}
+
 export async function POST(req: NextRequest) {
   const { rows } = (await req.json()) as { rows: ExportRow[] };
 
