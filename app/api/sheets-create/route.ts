@@ -4,14 +4,24 @@ import type { ExportRow } from "@/types/financial";
 
 const HEADERS = [
   "証券コード", "銘柄名", "業種", "前日終値", "PER", "PBR",
-  "配当利回り(%)", "信用倍率", "決算期", "売上高", "経常利益",
+  "配当利回り(%)", "決算期", "売上高", "経常利益",
   "最終利益", "1株利益", "1株配当", "発表日",
+  // 理論株価 計算過程
+  "予想経常利益", "BPS", "自己資本比率(%)",
+  "発行済株式数（推計）", "計算用EPS", "ROA",
+  "財務レバレッジ補正", "割引評価率", "事業価値", "資産価値", "理論株価",
 ];
 
-// 列ごとの幅(px)。全15列が画面に収まるようコンパクトに設定
-const COL_WIDTHS = [72, 150, 85, 80, 55, 55, 80, 70, 70, 105, 105, 105, 75, 75, 80];
+// 各列の幅(px)
+const COL_WIDTHS = [
+  72, 150, 85,   // コード 銘柄名 業種
+  80, 55, 55, 80, // 終値 PER PBR 利回
+  70,             // 決算期
+  105, 105, 105, 75, 75, 80, // 売上〜発表日
+  // 計算過程
+  105, 75, 80, 110, 80, 70, 80, 75, 105, 105, 95,
+];
 
-// FinancialTable.tsx の formatJPY と同一ロジック
 function formatJPY(v: number | null | undefined): string {
   if (v == null) return "";
   const negative = v < 0;
@@ -22,11 +32,9 @@ function formatJPY(v: number | null | undefined): string {
 
   let text: string;
   if (abs >= 1e8) {
-    // 円単位
     if (abs >= 1e12) text = fmt(v / 1e12, 1) + " 兆円";
     else text = fmt(Math.round(v / 1e8)) + " 億円";
   } else {
-    // 百万円単位
     if (abs >= 1_000_000) text = fmt(v / 1_000_000, 1) + " 兆円";
     else if (abs >= 10_000) text = fmt(Math.round(v / 100)) + " 億円";
     else if (abs >= 100) text = fmt(v / 100, 1) + " 億円";
@@ -40,6 +48,8 @@ function formatRow(d: ExportRow): string[] {
   const n = (v: number | null, dec = 1) =>
     v == null ? "" : new Intl.NumberFormat("ja-JP", { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(v);
 
+  const pct = (v: number | null) => v == null ? "" : n(v, 1) + "%";
+
   return [
     d.secCode ?? "",
     d.companyName ?? "",
@@ -48,7 +58,6 @@ function formatRow(d: ExportRow): string[] {
     n(d.per),
     n(d.pbr),
     d.dividendYield != null ? n(d.dividendYield, 2) + "%" : "",
-    d.marginRatio != null ? n(d.marginRatio) + "倍" : "",
     d.periodEnd ?? "",
     formatJPY(d.netSales),
     formatJPY(d.ordinaryIncome),
@@ -56,6 +65,18 @@ function formatRow(d: ExportRow): string[] {
     d.eps != null ? n(d.eps) + "円" : "",
     d.dps != null ? new Intl.NumberFormat("ja-JP").format(d.dps) + "円" : "",
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
+    // 理論株価 計算過程
+    formatJPY(d.forecastOrdinaryIncome),
+    d.bps != null ? new Intl.NumberFormat("ja-JP").format(Math.round(d.bps)) + "円" : "",
+    pct(d.equityRatioPct),
+    d.sharesEstimate != null ? new Intl.NumberFormat("ja-JP").format(d.sharesEstimate) + "株" : "",
+    d.calcEps != null ? n(d.calcEps, 2) + "円" : "",
+    d.roa != null ? n(d.roa * 100, 2) + "%" : "",
+    d.leverage != null ? String(d.leverage) : "",
+    d.discountRate != null ? n(d.discountRate * 100, 1) + "%" : "",
+    d.businessValue != null ? new Intl.NumberFormat("ja-JP").format(d.businessValue) + "円" : "",
+    d.assetValue != null ? new Intl.NumberFormat("ja-JP").format(d.assetValue) + "円" : "",
+    d.theoreticalPrice != null ? new Intl.NumberFormat("ja-JP").format(d.theoreticalPrice) + "円" : "",
   ];
 }
 
@@ -138,6 +159,7 @@ export async function POST(req: NextRequest) {
 
   // ── Step 3: 書式設定 ───────────────────────────────────────────────
   const dataRows = rows.length;
+  const totalCols = HEADERS.length;
   try {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
@@ -157,15 +179,35 @@ export async function POST(req: NextRequest) {
               fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
             },
           },
-          // データ行（数値列）右揃え: 前日終値〜発表日前まで(col3〜13)
+          // データ行（数値列）右揃え: 前日終値〜理論株価(col3〜24)
           {
             repeatCell: {
-              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: 3, endColumnIndex: 14 },
+              range: {
+                sheetId: newSheetId,
+                startRowIndex: 1, endRowIndex: dataRows + 1,
+                startColumnIndex: 3, endColumnIndex: totalCols,
+              },
               cell: { userEnteredFormat: { horizontalAlignment: "RIGHT" } },
               fields: "userEnteredFormat.horizontalAlignment",
             },
           },
-          // 全列の幅を個別に設定（全15列を画面内に収める）
+          // 理論株価計算列（14列目以降）に薄い黄色背景
+          {
+            repeatCell: {
+              range: {
+                sheetId: newSheetId,
+                startRowIndex: 0, endRowIndex: dataRows + 1,
+                startColumnIndex: 14, endColumnIndex: totalCols,
+              },
+              cell: {
+                userEnteredFormat: {
+                  backgroundColor: { red: 1, green: 0.988, blue: 0.878 },
+                },
+              },
+              fields: "userEnteredFormat.backgroundColor",
+            },
+          },
+          // 全列幅を設定
           ...COL_WIDTHS.map((pixelSize, i) => ({
             updateDimensionProperties: {
               range: { sheetId: newSheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
