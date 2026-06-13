@@ -2,40 +2,59 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import type { ExportRow } from "@/types/financial";
 
-// 列インデックス (0-based)
-const COL_PRICE = 3;          // 前日終値
-const COL_MONEY_START = 9;    // 売上高
-const COL_MONEY_END = 12;     // 最終利益まで (exclusive)
-const COL_PER_SHARE_START = 12; // 1株利益
-const COL_PER_SHARE_END = 14;   // 1株配当まで (exclusive)
-
 const HEADERS = [
-  "証券コード", "銘柄名", "業種", "前日終値(円)", "PER", "PBR",
-  "配当利回り(%)", "信用倍率", "決算期", "売上高(億円)", "経常利益(億円)",
-  "最終利益(億円)", "1株利益(円)", "1株配当(円)", "発表日",
+  "証券コード", "銘柄名", "業種", "前日終値", "PER", "PBR",
+  "配当利回り(%)", "信用倍率", "決算期", "売上高", "経常利益",
+  "最終利益", "1株利益", "1株配当", "発表日",
 ];
 
-function toOku(v: number | null | undefined): number | "" {
+// 列ごとの幅(px)。全15列が画面に収まるようコンパクトに設定
+const COL_WIDTHS = [72, 150, 85, 80, 55, 55, 80, 70, 70, 105, 105, 105, 75, 75, 80];
+
+// FinancialTable.tsx の formatJPY と同一ロジック
+function formatJPY(v: number | null | undefined): string {
   if (v == null) return "";
-  return Math.round(v / 100); // 百万円 → 億円
+  const negative = v < 0;
+  const abs = Math.abs(v);
+
+  const fmt = (n: number, dec = 0) =>
+    new Intl.NumberFormat("ja-JP", { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(n);
+
+  let text: string;
+  if (abs >= 1e8) {
+    // 円単位
+    if (abs >= 1e12) text = fmt(v / 1e12, 1) + " 兆円";
+    else text = fmt(Math.round(v / 1e8)) + " 億円";
+  } else {
+    // 百万円単位
+    if (abs >= 1_000_000) text = fmt(v / 1_000_000, 1) + " 兆円";
+    else if (abs >= 10_000) text = fmt(Math.round(v / 100)) + " 億円";
+    else if (abs >= 100) text = fmt(v / 100, 1) + " 億円";
+    else text = fmt(v) + " 百万円";
+  }
+
+  return negative ? `▼ ${text}` : text;
 }
 
-function formatRow(d: ExportRow): (string | number)[] {
+function formatRow(d: ExportRow): string[] {
+  const n = (v: number | null, dec = 1) =>
+    v == null ? "" : new Intl.NumberFormat("ja-JP", { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(v);
+
   return [
     d.secCode ?? "",
     d.companyName ?? "",
     d.industry ?? "",
-    d.currentPrice ?? "",
-    d.per ?? "",
-    d.pbr ?? "",
-    d.dividendYield ?? "",
-    d.marginRatio ?? "",
+    d.currentPrice != null ? new Intl.NumberFormat("ja-JP").format(d.currentPrice) + "円" : "",
+    n(d.per),
+    n(d.pbr),
+    d.dividendYield != null ? n(d.dividendYield, 2) + "%" : "",
+    d.marginRatio != null ? n(d.marginRatio) + "倍" : "",
     d.periodEnd ?? "",
-    toOku(d.netSales),
-    toOku(d.ordinaryIncome),
-    toOku(d.netIncome),
-    d.eps ?? "",
-    d.dps ?? "",
+    formatJPY(d.netSales),
+    formatJPY(d.ordinaryIncome),
+    formatJPY(d.netIncome),
+    d.eps != null ? n(d.eps) + "円" : "",
+    d.dps != null ? new Intl.NumberFormat("ja-JP").format(d.dps) + "円" : "",
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
   ];
 }
@@ -63,10 +82,7 @@ export async function POST(req: NextRequest) {
 
   const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID?.replace(/^﻿/, "").trim();
   if (!spreadsheetId) {
-    return NextResponse.json(
-      { error: "GOOGLE_SPREADSHEET_ID が未設定です。" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "GOOGLE_SPREADSHEET_ID が未設定です。" }, { status: 500 });
   }
 
   let auth: ReturnType<typeof buildAuth>;
@@ -111,7 +127,7 @@ export async function POST(req: NextRequest) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `${sheetTitle}!A1`,
-      valueInputOption: "USER_ENTERED",
+      valueInputOption: "RAW",
       requestBody: { values },
     });
   } catch (e: unknown) {
@@ -127,7 +143,7 @@ export async function POST(req: NextRequest) {
       spreadsheetId,
       requestBody: {
         requests: [
-          // ヘッダー装飾
+          // ヘッダー背景・太字・白文字・中央揃え
           {
             repeatCell: {
               range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1 },
@@ -141,37 +157,23 @@ export async function POST(req: NextRequest) {
               fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
             },
           },
-          // 前日終値: #,##0"円"
+          // データ行（数値列）右揃え: 前日終値〜発表日前まで(col3〜13)
           {
             repeatCell: {
-              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: COL_PRICE, endColumnIndex: COL_PRICE + 1 },
-              cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: '#,##0"円"' } } },
-              fields: "userEnteredFormat.numberFormat",
+              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: 3, endColumnIndex: 14 },
+              cell: { userEnteredFormat: { horizontalAlignment: "RIGHT" } },
+              fields: "userEnteredFormat.horizontalAlignment",
             },
           },
-          // 売上高・経常利益・最終利益: #,##0"億円"
-          {
-            repeatCell: {
-              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: COL_MONEY_START, endColumnIndex: COL_MONEY_END },
-              cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: '#,##0"億円"' } } },
-              fields: "userEnteredFormat.numberFormat",
+          // 全列の幅を個別に設定（全15列を画面内に収める）
+          ...COL_WIDTHS.map((pixelSize, i) => ({
+            updateDimensionProperties: {
+              range: { sheetId: newSheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
+              properties: { pixelSize },
+              fields: "pixelSize",
             },
-          },
-          // 1株利益・1株配当: #,##0.0"円"
-          {
-            repeatCell: {
-              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: dataRows + 1, startColumnIndex: COL_PER_SHARE_START, endColumnIndex: COL_PER_SHARE_END },
-              cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: '#,##0.0"円"' } } },
-              fields: "userEnteredFormat.numberFormat",
-            },
-          },
-          // 列幅自動調整
-          {
-            autoResizeDimensions: {
-              dimensions: { sheetId: newSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: HEADERS.length },
-            },
-          },
-          // 1行目固定
+          })),
+          // 1行目を固定
           {
             updateSheetProperties: {
               properties: { sheetId: newSheetId, gridProperties: { frozenRowCount: 1 } },
