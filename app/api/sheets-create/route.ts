@@ -67,17 +67,18 @@ export async function POST(req: NextRequest) {
     .toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" })
     .replace(/\//g, "-");
 
-  // ── Step 1: 空のスプレッドシートを作成 ──────────────────────────────
+  // ── Step 1: Drive API でスプレッドシートを作成 ───────────────────────
   let spreadsheetId: string;
-  let sheetId: number;
+  const sheetId = 0;
   try {
-    const createRes = await sheets.spreadsheets.create({
+    const createRes = await drive.files.create({
       requestBody: {
-        properties: { title: `財務データ_${today}` },
+        name: `財務データ_${today}`,
+        mimeType: "application/vnd.google-apps.spreadsheet",
       },
+      fields: "id",
     });
-    spreadsheetId = createRes.data.spreadsheetId!;
-    sheetId = createRes.data.sheets?.[0]?.properties?.sheetId ?? 0;
+    spreadsheetId = createRes.data.id!;
   } catch (e: unknown) {
     const err = e as { message?: string; response?: { status?: number; data?: unknown } };
     const detail = JSON.stringify(err.response?.data ?? err.message ?? e);
