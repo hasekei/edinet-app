@@ -138,15 +138,13 @@ export default function Home() {
   });
 
   function fetchMarketDataBg(code: string) {
-    Promise.all([
-      fetch(`/api/market-data?secCode=${code}`).then((r) => r.json()),
-      fetch(`/api/margin-data?secCode=${code}`).then((r) => r.json()),
-    ])
-      .then(([market, margin]: [MarketData & { error?: string }, { secCode: string; marginRatio: number | null }]) => {
+    fetch(`/api/market-data?secCode=${code}`)
+      .then((r) => r.json())
+      .then((market: MarketData & { error?: string }) => {
         if (market && !market.error) {
           setMarketData((prev) => ({
             ...prev,
-            [code]: { ...market, marginRatio: margin?.marginRatio ?? null },
+            [code]: { ...market, marginRatio: null },
           }));
         }
       })

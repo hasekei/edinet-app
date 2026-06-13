@@ -9,7 +9,6 @@ const HEADERS = [
   "PER",
   "PBR",
   "配当利回り(%)",
-  "信用倍率",
   "決算期",
   "売上高",
   "経常利益",
@@ -28,7 +27,6 @@ function formatRow(d: ExportRow): (string | number | null)[] {
     d.per,
     d.pbr,
     d.dividendYield,
-    d.marginRatio,
     d.periodEnd,
     d.netSales,
     d.ordinaryIncome,
@@ -70,14 +68,13 @@ export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
   }
 
   // 列幅・数値書式
-  const numericCols = [4, 5, 6, 7, 8, 10, 11, 12, 13, 14]; // 数値列
+  const numericCols = [4, 5, 6, 7, 9, 10, 11, 12, 13]; // 数値列
   ws.columns.forEach((col, idx) => {
     const colNo = idx + 1;
     col.width = colNo === 2 ? 28 : colNo === 3 ? 18 : 14;
     if (numericCols.includes(colNo)) {
       col.alignment = { horizontal: "right" };
-      // 整数列と小数列で書式を分ける
-      if ([4, 10, 11, 12, 13, 14].includes(colNo)) {
+      if ([4, 9, 10, 11, 12, 13].includes(colNo)) {
         col.numFmt = "#,##0.##";
       } else {
         col.numFmt = "#,##0.00";
