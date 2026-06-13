@@ -1,6 +1,6 @@
 import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
-import type { AccountingStandard, FinancialData } from "@/types/financial";
+import type { AccountingStandard, ForecastData } from "@/types/financial";
 
 // ---- タグマッピング --------------------------------------------------------
 
@@ -130,6 +130,52 @@ const IFRS_TAGS = {
     "DividendPerShareDividendsOfSurplus",
   ],
 };
+
+// ---- 決算短信用タグ --------------------------------------------------------
+
+const FORECAST_TAGS = {
+  forecastOrdinaryIncome: [
+    "ForecastOrdinaryIncome",
+    "ForecastOrdinaryIncomeLoss",
+    "ForecastOrdinaryIncomeSummaryOfBusinessResults",
+    "ForecastOrdinaryIncomeLossSummaryOfBusinessResults",
+    // IFRS・US-GAAP企業は経常利益なしのため営業利益で代替
+    "ForecastOperatingIncome",
+    "ForecastOperatingIncomeLoss",
+    "ForecastOperatingIncomeSummaryOfBusinessResults",
+  ],
+  bps: [
+    "BookValuePerShareSummaryOfBusinessResults",
+    "NetAssetsPerShareSummaryOfBusinessResults",
+    "BookValuePerShare",
+    "NetAssetsPerShare",
+  ],
+  equityRatio: [
+    "EquityToAssetRatioSummaryOfBusinessResults",
+    "EquityRatioSummaryOfBusinessResults",
+    "EquityToAssetRatio",
+    "EquityRatio",
+  ],
+};
+
+// 翌期予想コンテキスト（決算短信）
+const FORECAST_CONTEXTS = [
+  "Next1YearDuration_ConsolidatedMember",
+  "Next1YearDuration_NonConsolidatedMember",
+  "Next1YearDuration",
+  "NextYearDuration_ConsolidatedMember",
+  "NextYearDuration",
+];
+
+// 期末時点コンテキスト（BPS・自己資本比率はInstant）
+const INSTANT_CONTEXTS = [
+  "CurrentYearInstant_ConsolidatedMember",
+  "CurrentYearInstant_NonConsolidatedMember",
+  "CurrentYearInstant",
+  "FilingDateInstant_ConsolidatedMember",
+  "FilingDateInstant_NonConsolidatedMember",
+  "FilingDateInstant",
+];
 
 // ---- コンテキスト --------------------------------------------------------
 
@@ -400,6 +446,34 @@ function extractNumericValue(obj: Record<string, unknown>): number | null {
 
 // ---- 値の検索 --------------------------------------------------------------
 
+function findValueByContexts(
+  elements: FlatElement[],
+  tagNames: string[],
+  preferContexts: string[],
+  fallbackContexts: string[] = [],
+): number | null {
+  for (const tagName of tagNames) {
+    const preferred = elements.find(
+      (e) => e.localName === tagName && preferContexts.some((kw) => e.contextRef.includes(kw))
+    );
+    if (preferred) return preferred.value;
+  }
+  if (fallbackContexts.length > 0) {
+    for (const tagName of tagNames) {
+      const fallback = elements.find(
+        (e) => e.localName === tagName && fallbackContexts.some((kw) => e.contextRef.includes(kw))
+      );
+      if (fallback) return fallback.value;
+    }
+  }
+  // 最終フォールバック: タグ名一致のみ
+  for (const tagName of tagNames) {
+    const any = elements.find((e) => e.localName === tagName);
+    if (any) return any.value;
+  }
+  return null;
+}
+
 function findValue(
   elements: FlatElement[],
   tagNames: string[],
@@ -441,4 +515,77 @@ function findValue(
   }
 
   return null;
+}
+
+// ---- 決算短信パーサー -------------------------------------------------------
+
+export interface ParsedForecast {
+  forecastOrdinaryIncome: number | null;
+  bps: number | null;
+  equityRatio: number | null;
+}
+
+export function parseForecastXbrl(zipBuffer: Buffer): ParsedForecast {
+  const zip = new AdmZip(zipBuffer);
+  const entries = zip.getEntries();
+
+  const isExcluded = (name: string) =>
+    /manifest|_cal\.|_def\.|_lab\.|_pre\.|_ref\./i.test(name);
+
+  const xbrlEntry =
+    entries.find((e) => !e.isDirectory && e.entryName.endsWith(".xbrl") && !isExcluded(e.entryName)) ??
+    entries.find((e) => !e.isDirectory && e.entryName.match(/-ixbrl\.htm$/i) && !isExcluded(e.entryName)) ??
+    entries.find((e) => !e.isDirectory && /\.(htm|html|xhtml)$/i.test(e.entryName) && /publicdoc/i.test(e.entryName) && !isExcluded(e.entryName)) ??
+    entries.find((e) => !e.isDirectory && /\.(htm|html|xhtml)$/i.test(e.entryName) && !isExcluded(e.entryName));
+
+  if (!xbrlEntry) return { forecastOrdinaryIncome: null, bps: null, equityRatio: null };
+
+  const content = xbrlEntry.getData().toString("utf-8");
+
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    allowBooleanAttributes: true,
+    parseAttributeValue: true,
+    trimValues: true,
+  });
+
+  const parsed = parser.parse(content);
+  const root =
+    parsed["xbrli:xbrl"] ?? parsed["xbrl"] ?? parsed["ix:xbrl"] ?? Object.values(parsed)[0] ?? {};
+
+  const contexts = collectContexts(root as Record<string, unknown>);
+  const isConsolidated = hasConsolidatedContext(contexts);
+  const elements = flattenXbrl(root);
+
+  // 予想経常利益: 翌期予想コンテキスト → 当期コンテキスト → 任意
+  const forecastOrdinaryIncome = findValueByContexts(
+    elements,
+    FORECAST_TAGS.forecastOrdinaryIncome,
+    isConsolidated
+      ? FORECAST_CONTEXTS.filter((c) => c.includes("Consolidated"))
+      : FORECAST_CONTEXTS.filter((c) => c.includes("NonConsolidated")),
+    FORECAST_CONTEXTS,
+  );
+
+  // BPS・自己資本比率: 期末Instantコンテキスト優先
+  const bps = findValueByContexts(
+    elements,
+    FORECAST_TAGS.bps,
+    isConsolidated
+      ? INSTANT_CONTEXTS.filter((c) => c.includes("Consolidated"))
+      : INSTANT_CONTEXTS.filter((c) => c.includes("NonConsolidated")),
+    INSTANT_CONTEXTS,
+  );
+
+  const equityRatio = findValueByContexts(
+    elements,
+    FORECAST_TAGS.equityRatio,
+    isConsolidated
+      ? INSTANT_CONTEXTS.filter((c) => c.includes("Consolidated"))
+      : INSTANT_CONTEXTS.filter((c) => c.includes("NonConsolidated")),
+    INSTANT_CONTEXTS,
+  );
+
+  return { forecastOrdinaryIncome, bps, equityRatio };
 }

@@ -9,7 +9,8 @@ import CompanySearch from "@/components/CompanySearch";
 import FinancialTable from "@/components/FinancialTable";
 import ExportPanel from "@/components/ExportPanel";
 import StatusList from "@/components/StatusList";
-import type { BatchResult, FinancialData, MarketData, ExportRow } from "@/types/financial";
+import type { BatchResult, FinancialData, MarketData, ExportRow, ForecastData } from "@/types/financial";
+import { calcTheoreticalPrice } from "@/lib/theoretical-price";
 import MarketDataTable from "@/components/MarketDataTable";
 
 function sleep(ms: number) {
@@ -107,6 +108,7 @@ export default function Home() {
   const [results, setResults] = useState<BatchResult[]>([]);
   const [running, setRunning] = useState(false);
   const [marketData, setMarketData] = useState<Record<string, MarketData>>({});
+  const [forecastData, setForecastData] = useState<Record<string, ForecastData>>({});
   const resultsRef = useRef<HTMLElement>(null);
 
   const doneRows = results.flatMap((r) => {
@@ -118,6 +120,8 @@ export default function Home() {
 
   const exportRows: ExportRow[] = doneRows.map((d) => {
     const m = marketData[d.secCode];
+    const f = forecastData[d.secCode];
+    const theoreticalPrice = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
     return {
       secCode: d.secCode,
       companyName: d.companyName,
@@ -134,6 +138,10 @@ export default function Home() {
       eps: d.eps,
       dps: d.dps,
       submitDateTime: d.submitDateTime ?? null,
+      theoreticalPrice,
+      forecastOrdinaryIncome: f?.forecastOrdinaryIncome ?? null,
+      bps: f?.bps ?? null,
+      equityRatio: f?.equityRatio ?? null,
     };
   });
 
@@ -151,6 +159,15 @@ export default function Home() {
       .catch(() => {});
   }
 
+  function fetchForecastBg(code: string) {
+    fetch(`/api/forecast?secCode=${code}`)
+      .then((r) => r.json())
+      .then((data: ForecastData) => {
+        setForecastData((prev) => ({ ...prev, [code]: data }));
+      })
+      .catch(() => {});
+  }
+
   async function handleSingle() {
     const code = singleCode.trim();
     if (!/^\d{4}$/.test(code)) {
@@ -163,6 +180,7 @@ export default function Home() {
     }
     setRunning(true);
     setMarketData({});
+    setForecastData({});
     setResults([{ secCode: code, companyName: singleName, status: "processing" }]);
     setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     try {
@@ -171,6 +189,7 @@ export default function Home() {
       setResults([{ secCode: code, companyName: name, status: "done", ...result }]);
       toast.success(`${name} のデータを取得しました`);
       fetchMarketDataBg(code);
+      fetchForecastBg(code);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setResults([{ secCode: code, status: "error", error: msg }]);
@@ -201,6 +220,7 @@ export default function Home() {
 
     setRunning(true);
     setMarketData({});
+    setForecastData({});
     const initial: BatchResult[] = codes.map((c) => ({ secCode: c, status: "pending" }));
     setResults(initial);
     setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
@@ -215,6 +235,7 @@ export default function Home() {
         const name = result.data?.companyName ?? result.multipleData?.[0]?.companyName;
         updated[i] = { secCode: code, companyName: name, status: "done", ...result };
         fetchMarketDataBg(code);
+        fetchForecastBg(code);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         updated[i] = { secCode: code, status: "error", error: msg };
@@ -339,7 +360,7 @@ export default function Home() {
             <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
               財務データ（有価証券報告書）
             </h2>
-            <FinancialTable results={results} />
+            <FinancialTable results={results} forecastData={forecastData} marketData={marketData} />
             <ExportPanel rows={exportRows} />
           </div>
         </section>

@@ -16,6 +16,10 @@ const HEADERS = [
   "1株利益",
   "1株配当",
   "発表日",
+  "理論株価",
+  "予想経常利益",
+  "BPS",
+  "自己資本比率(%)",
 ];
 
 function formatRow(d: ExportRow): (string | number | null)[] {
@@ -34,6 +38,15 @@ function formatRow(d: ExportRow): (string | number | null)[] {
     d.eps,
     d.dps,
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
+    d.theoreticalPrice,
+    d.forecastOrdinaryIncome,
+    d.bps,
+    // 自己資本比率: 小数(0.35)の場合はパーセント表記(35.0)に変換
+    d.equityRatio != null
+      ? d.equityRatio <= 1
+        ? Math.round(d.equityRatio * 1000) / 10
+        : Math.round(d.equityRatio * 10) / 10
+      : null,
   ];
 }
 
@@ -68,13 +81,14 @@ export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
   }
 
   // 列幅・数値書式
-  const numericCols = [4, 5, 6, 7, 9, 10, 11, 12, 13]; // 数値列
+  // 列: 1=コード 2=名 3=業種 4=終値 5=PER 6=PBR 7=利回 8=決算期 9=売上 10=経常 11=純利 12=EPS 13=DPS 14=発表 15=理論株価 16=予想経常 17=BPS 18=自己資本比率
+  const numericCols = [4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16, 17, 18];
   ws.columns.forEach((col, idx) => {
     const colNo = idx + 1;
     col.width = colNo === 2 ? 28 : colNo === 3 ? 18 : 14;
     if (numericCols.includes(colNo)) {
       col.alignment = { horizontal: "right" };
-      if ([4, 9, 10, 11, 12, 13].includes(colNo)) {
+      if ([4, 9, 10, 11, 12, 13, 15, 16, 17].includes(colNo)) {
         col.numFmt = "#,##0.##";
       } else {
         col.numFmt = "#,##0.00";
