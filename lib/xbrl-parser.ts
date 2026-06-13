@@ -6,21 +6,52 @@ import type { AccountingStandard, FinancialData } from "@/types/financial";
 
 const JGAAP_TAGS = {
   netSales: [
+    // 一般製造業・商社
     "NetSales",
     "NetSalesOfCompletedConstructionContracts",
     "OperatingRevenues",
     "Revenues",
     "GrossSales",
     "NetRevenues",
+    // 決算概要 (jpcrp_cor:NetSalesSummaryOfBusinessResults)
+    "NetSalesSummaryOfBusinessResults",
+    // 不動産業
+    "NetSalesORRealEstate",
+    // 銀行業の経常収益（売上高相当）
+    "OrdinaryIncomeBNK",
+    // 保険業の経常収益（売上高相当）
+    "OperatingIncomeINS",
+    // 電力・ガス・通信・鉄道・高速道路等の営業収益
+    "OperatingRevenue1",
+    "OperatingRevenue1SummaryOfBusinessResults",
+    "OperatingRevenueCNA",
+    "OperatingRevenueSEC",
+    "OperatingRevenueRWY",
+    "OperatingRevenueHighwayBusinessHWY",
+    // US-GAAP決算概要
+    "RevenuesUSGAAPSummaryOfBusinessResults",
   ],
-  operatingIncome: ["OperatingIncome", "OperatingIncomeLoss"],
-  ordinaryIncome: ["OrdinaryIncome", "OrdinaryIncomeLoss"],
+  operatingIncome: [
+    "OperatingIncome",
+    "OperatingIncomeLoss",
+    // US-GAAP決算概要
+    "OperatingIncomeLossUSGAAPSummaryOfBusinessResults",
+  ],
+  ordinaryIncome: [
+    "OrdinaryIncome",
+    "OrdinaryIncomeLoss",
+    // 決算概要
+    "OrdinaryIncomeLossSummaryOfBusinessResults",
+  ],
   netIncome: [
     "ProfitLoss",
     "ProfitLossAttributableToOwnersOfParent",
     "NetIncome",
     "NetIncomeLoss",
     "ProfitLossAttributableToOwnersOfParentInSummaryOfBusinessResults",
+    // 決算概要 (jpcrp_cor)
+    "NetIncomeLossSummaryOfBusinessResults",
+    "ProfitLossAttributableToOwnersOfParentSummaryOfBusinessResults",
   ],
   eps: [
     "EarningsPerShare",
@@ -31,6 +62,8 @@ const JGAAP_TAGS = {
     "ProfitLossAttributableToOwnersOfParentPerShare",
     "BasicEarningsLossPerShare",
     "NetIncomeLossPerShare",
+    // 決算概要
+    "BasicEarningsLossPerShareSummaryOfBusinessResults",
   ],
   dps: [
     "AnnualDividendsPerShare",
@@ -43,6 +76,9 @@ const JGAAP_TAGS = {
     "YearEndDividendsPerShare",
     "InterimDividendsPerShare",
     "DividendPerShare",
+    // 決算概要
+    "DividendPaidPerShareSummaryOfBusinessResults",
+    "DividendPerShareDividendsOfSurplus",
   ],
 };
 
@@ -53,6 +89,9 @@ const IFRS_TAGS = {
     "SalesRevenueIFRS",
     "RevenueIFRS",
     "NetSalesIFRS",
+    // 決算概要 (jpcrp_cor)
+    "RevenueSummaryOfBusinessResults",
+    "RevenueAndOtherIncomeIFRS",
   ],
   operatingIncome: [
     "OperatingProfitLossIFRS",
@@ -64,6 +103,8 @@ const IFRS_TAGS = {
     "ProfitLossAttributableToOwnersOfParentIFRS",
     "ProfitLossIFRS",
     "NetIncomeIFRS",
+    // 決算概要
+    "ProfitLossAttributableToOwnersOfParentSummaryOfBusinessResults",
   ],
   eps: [
     "BasicEarningsLossPerShareIFRS",
@@ -73,6 +114,8 @@ const IFRS_TAGS = {
     "BasicEarningsLossPerShare",
     "BasicEarningsPerShare",
     "EarningsPerShare",
+    // 決算概要
+    "BasicEarningsLossPerShareSummaryOfBusinessResults",
   ],
   dps: [
     "DividendsPerShareIFRS",
@@ -82,6 +125,9 @@ const IFRS_TAGS = {
     "DividendsPerShare",
     "AnnualDividendsPerShare",
     "DividendPerShareIFRS",
+    // 決算概要
+    "DividendPaidPerShareSummaryOfBusinessResults",
+    "DividendPerShareDividendsOfSurplus",
   ],
 };
 
@@ -302,6 +348,8 @@ function flattenXbrl(root: unknown): FlatElement[] {
               // scale 属性: iXBRL では scale=6 なら × 10^6
               const scale = Number(itemObj["@_scale"] ?? 0);
               if (scale !== 0) numVal = numVal * Math.pow(10, scale);
+              // sign="-" 属性: 値を負に反転（損失等）
+              if (String(itemObj["@_sign"] ?? "") === "-") numVal = -numVal;
             }
             const contextRef = String(itemObj["@_contextRef"] ?? "");
             if (ixLocalName && numVal !== null && contextRef) {

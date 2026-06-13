@@ -126,7 +126,7 @@ export default function Home() {
       per: m?.per ?? null,
       pbr: m?.pbr ?? null,
       dividendYield: m?.dividendYield ?? null,
-      marginRatio: null,
+      marginRatio: m?.marginRatio ?? null,
       periodEnd: d.periodEnd,
       netSales: d.netSales,
       ordinaryIncome: d.ordinaryIncome,
@@ -138,11 +138,16 @@ export default function Home() {
   });
 
   function fetchMarketDataBg(code: string) {
-    fetch(`/api/market-data?secCode=${code}`)
-      .then((r) => r.json())
-      .then((item: MarketData & { error?: string }) => {
-        if (item && !item.error) {
-          setMarketData((prev) => ({ ...prev, [code]: item }));
+    Promise.all([
+      fetch(`/api/market-data?secCode=${code}`).then((r) => r.json()),
+      fetch(`/api/margin-data?secCode=${code}`).then((r) => r.json()),
+    ])
+      .then(([market, margin]: [MarketData & { error?: string }, { secCode: string; marginRatio: number | null }]) => {
+        if (market && !market.error) {
+          setMarketData((prev) => ({
+            ...prev,
+            [code]: { ...market, marginRatio: margin?.marginRatio ?? null },
+          }));
         }
       })
       .catch(() => {});

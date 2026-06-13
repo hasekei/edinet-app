@@ -50,6 +50,7 @@ export interface MarketData {
   pbr: number | null;
   dividendYield: number | null;
   industry: string | null;
+  marginRatio: number | null;
 }
 
 export interface ExportRow {
