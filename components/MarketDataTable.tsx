@@ -133,7 +133,7 @@ export default function MarketDataTable({ companies, marketData, latestFinancial
         </TableBody>
       </Table>
       <p className="px-4 py-2 text-xs text-muted-foreground border-t">
-        ※ 株価はYahoo Financeより取得（遅延あり）。PER・PBR・配当利回りは前日終値 × EDINETの実績EPS/BPS/DPSで算出。業種はJPX 33業種区分。
+        ※ 株価はYahoo Financeより取得（遅延あり）。PER・PBR・配当利回りは前日終値 × EDINETの実績EPS/BPS/DPSで算出（実績ベースのため、Yahoo等サイトの「会社予想」基準の数値とは一致しません）。業種はJPX 33業種区分。
       </p>
     </div>
   );
