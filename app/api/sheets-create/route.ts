@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
   // ── Step 3: 書式設定 ───────────────────────────────────────────────
   const dataRows = rows.length;
   const totalCols = HEADERS.length;
-  const calcStartCol = 14; // 「予想経常利益」以降
+  const calcStartCol = 14; // 「経常利益（計算用・実績）」以降
   try {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
