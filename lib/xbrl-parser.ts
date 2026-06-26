@@ -132,15 +132,22 @@ const IFRS_TAGS = {
 };
 
 // ---- BPS・自己資本比率タグ（有報の「主要な経営指標等の推移」より実績値） --------
-
+//
+// 注意: IFRS提出企業のタクソノミでは、連結の「1株当たり純資産額」が
+// "EquityToAssetRatioIFRSSummaryOfBusinessResults" タグに格納される
+// (EDINETタクソノミ側の既知の名称不整合。実データで検証済み:
+//  トヨタ/KDDIともに「連結純資産÷株式数」の実値と一致する一方、
+//  本来の自己資本比率は別タグ"RatioOfOwnersEquityToGrossAssetsIFRS..."に入っている)
 const PER_SHARE_TAGS = {
   bps: [
+    "EquityToAssetRatioIFRSSummaryOfBusinessResults",
     "BookValuePerShareSummaryOfBusinessResults",
     "NetAssetsPerShareSummaryOfBusinessResults",
     "BookValuePerShare",
     "NetAssetsPerShare",
   ],
   equityRatio: [
+    "RatioOfOwnersEquityToGrossAssetsIFRSSummaryOfBusinessResults",
     "EquityToAssetRatioSummaryOfBusinessResults",
     "EquityRatioSummaryOfBusinessResults",
     "EquityToAssetRatio",
@@ -148,14 +155,12 @@ const PER_SHARE_TAGS = {
   ],
 };
 
-// 期末時点コンテキスト（BPS・自己資本比率はInstant）
-const INSTANT_CONTEXTS = [
-  "CurrentYearInstant_ConsolidatedMember",
+// 期末時点コンテキスト。連結企業はサフィックスなしの素のコンテキストを使用し、
+// "_NonConsolidatedMember"（提出会社単体）の値と混在させない。
+const CONSOLIDATED_INSTANT_CONTEXTS = ["CurrentYearInstant", "FilingDateInstant"];
+const NON_CONSOLIDATED_INSTANT_CONTEXTS = [
   "CurrentYearInstant_NonConsolidatedMember",
-  "CurrentYearInstant",
-  "FilingDateInstant_ConsolidatedMember",
   "FilingDateInstant_NonConsolidatedMember",
-  "FilingDateInstant",
 ];
 
 // ---- コンテキスト --------------------------------------------------------
@@ -263,23 +268,8 @@ function extractFromXbrlContent(content: string): ParsedFinancials {
   const flatElements = flattenXbrl(root);
   const periodEnd = extractPeriodEnd(contexts) ?? "";
 
-  const bps = findValueByContexts(
-    flatElements,
-    PER_SHARE_TAGS.bps,
-    isConsolidated
-      ? INSTANT_CONTEXTS.filter((c) => c.includes("Consolidated"))
-      : INSTANT_CONTEXTS.filter((c) => c.includes("NonConsolidated")),
-    INSTANT_CONTEXTS,
-  );
-
-  const equityRatio = findValueByContexts(
-    flatElements,
-    PER_SHARE_TAGS.equityRatio,
-    isConsolidated
-      ? INSTANT_CONTEXTS.filter((c) => c.includes("Consolidated"))
-      : INSTANT_CONTEXTS.filter((c) => c.includes("NonConsolidated")),
-    INSTANT_CONTEXTS,
-  );
+  const bps = findPerShareValue(flatElements, PER_SHARE_TAGS.bps, isConsolidated);
+  const equityRatio = findPerShareValue(flatElements, PER_SHARE_TAGS.equityRatio, isConsolidated);
 
   return {
     netSales: findValue(flatElements, tagMap.netSales, isConsolidated),
@@ -449,30 +439,32 @@ function extractNumericValue(obj: Record<string, unknown>): number | null {
 
 // ---- 値の検索 --------------------------------------------------------------
 
-function findValueByContexts(
+// BPS・自己資本比率専用。連結基準と単体基準の値を混在させないよう、
+// contextRefの完全一致のみで判定する（部分一致だと
+// "NonConsolidatedMember" が "Consolidated" にも誤マッチしてしまうため）。
+function findPerShareValue(
   elements: FlatElement[],
   tagNames: string[],
-  preferContexts: string[],
-  fallbackContexts: string[] = [],
+  isConsolidated: boolean,
 ): number | null {
+  const contexts = isConsolidated
+    ? CONSOLIDATED_INSTANT_CONTEXTS
+    : NON_CONSOLIDATED_INSTANT_CONTEXTS;
+
   for (const tagName of tagNames) {
-    const preferred = elements.find(
-      (e) => e.localName === tagName && preferContexts.some((kw) => e.contextRef.includes(kw))
-    );
-    if (preferred) return preferred.value;
-  }
-  if (fallbackContexts.length > 0) {
-    for (const tagName of tagNames) {
-      const fallback = elements.find(
-        (e) => e.localName === tagName && fallbackContexts.some((kw) => e.contextRef.includes(kw))
-      );
-      if (fallback) return fallback.value;
+    for (const ctx of contexts) {
+      const match = elements.find((e) => e.localName === tagName && e.contextRef === ctx);
+      if (match) return match.value;
     }
   }
-  // 最終フォールバック: タグ名一致のみ
-  for (const tagName of tagNames) {
-    const any = elements.find((e) => e.localName === tagName);
-    if (any) return any.value;
+  // 単体企業で単体コンテキストが見つからない場合のみ、素のコンテキストにフォールバック
+  if (!isConsolidated) {
+    for (const tagName of tagNames) {
+      for (const ctx of CONSOLIDATED_INSTANT_CONTEXTS) {
+        const match = elements.find((e) => e.localName === tagName && e.contextRef === ctx);
+        if (match) return match.value;
+      }
+    }
   }
   return null;
 }
