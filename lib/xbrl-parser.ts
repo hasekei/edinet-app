@@ -43,15 +43,18 @@ const JGAAP_TAGS = {
     // 決算概要
     "OrdinaryIncomeLossSummaryOfBusinessResults",
   ],
+  // 「ProfitLoss」(非支配株主分を含む連結純利益)より先に
+  // 「ProfitLossAttributableToOwnersOfParent」(親会社株主に帰属する純利益、
+  // EPSの算出基準でもある一般的な「純利益」)を優先する
   netIncome: [
-    "ProfitLoss",
     "ProfitLossAttributableToOwnersOfParent",
+    "ProfitLossAttributableToOwnersOfParentSummaryOfBusinessResults",
+    "ProfitLossAttributableToOwnersOfParentInSummaryOfBusinessResults",
+    "ProfitLoss",
     "NetIncome",
     "NetIncomeLoss",
-    "ProfitLossAttributableToOwnersOfParentInSummaryOfBusinessResults",
     // 決算概要 (jpcrp_cor)
     "NetIncomeLossSummaryOfBusinessResults",
-    "ProfitLossAttributableToOwnersOfParentSummaryOfBusinessResults",
   ],
   eps: [
     "EarningsPerShare",
@@ -272,12 +275,12 @@ function extractFromXbrlContent(content: string): ParsedFinancials {
   const equityRatio = findPerShareValue(flatElements, PER_SHARE_TAGS.equityRatio, isConsolidated);
 
   return {
-    netSales: findValue(flatElements, tagMap.netSales, isConsolidated),
-    operatingIncome: findValue(flatElements, tagMap.operatingIncome, isConsolidated),
-    ordinaryIncome: findValue(flatElements, tagMap.ordinaryIncome, isConsolidated),
-    netIncome: findValue(flatElements, tagMap.netIncome, isConsolidated),
-    eps: findValue(flatElements, tagMap.eps, isConsolidated),
-    dps: findValue(flatElements, tagMap.dps, isConsolidated),
+    netSales: findValue(flatElements, tagMap.netSales),
+    operatingIncome: findValue(flatElements, tagMap.operatingIncome),
+    ordinaryIncome: findValue(flatElements, tagMap.ordinaryIncome),
+    netIncome: findValue(flatElements, tagMap.netIncome),
+    eps: findValue(flatElements, tagMap.eps),
+    dps: findValue(flatElements, tagMap.dps),
     bps,
     equityRatio,
     isConsolidated,
@@ -336,10 +339,11 @@ function collectContexts(root: Record<string, unknown>): Context[] {
   return contexts;
 }
 
+// 連結/単体の両方を開示している(="_NonConsolidatedMember"の専用コンテキストが
+// 別途存在する)場合のみ連結企業と判定する。素の"CurrentYearDuration"は
+// 単体のみの企業でも使われるため、これだけでは連結の判定材料にならない。
 function hasConsolidatedContext(contexts: Context[]): boolean {
-  return contexts.some((c) =>
-    CONSOLIDATED_CONTEXTS.some((kw) => c.id.includes(kw))
-  );
+  return contexts.some((c) => c.id.includes("_NonConsolidatedMember"));
 }
 
 function extractPeriodEnd(contexts: Context[]): string | undefined {
@@ -472,46 +476,29 @@ function findPerShareValue(
   return null;
 }
 
-function findValue(
-  elements: FlatElement[],
-  tagNames: string[],
-  preferConsolidated: boolean
-): number | null {
-  const preferredKeywords = preferConsolidated
-    ? CONSOLIDATED_CONTEXTS
-    : NON_CONSOLIDATED_CONTEXTS;
-  const fallbackKeywords = preferConsolidated
-    ? NON_CONSOLIDATED_CONTEXTS
-    : CONSOLIDATED_CONTEXTS;
-
+// 素の"CurrentYearDuration"(連結時はグループ全体、単体のみの企業では
+// その企業自身)を常に優先し、"_NonConsolidatedMember"(提出会社単体の
+// 補足データ)へは素のコンテキストが存在しない場合のみフォールバックする。
+// contextRefの完全一致のみで判定し、部分一致による誤マッチ
+// ("NonConsolidated"が"Consolidated"を含んでしまう等)を避ける。
+function findValue(elements: FlatElement[], tagNames: string[]): number | null {
   for (const tagName of tagNames) {
-    // 1. 優先コンテキスト
-    const preferred = elements.find(
-      (e) =>
-        e.localName === tagName &&
-        preferredKeywords.some((kw) => e.contextRef.includes(kw))
+    const primary = elements.find(
+      (e) => e.localName === tagName && e.contextRef === "CurrentYearDuration"
     );
-    if (preferred) return preferred.value;
-
-    // 2. CurrentYearDuration を含む任意のコンテキスト
-    const duration = elements.find(
-      (e) => e.localName === tagName && e.contextRef.includes("CurrentYearDuration")
+    if (primary) return primary.value;
+  }
+  for (const tagName of tagNames) {
+    const nonConsolidated = elements.find(
+      (e) => e.localName === tagName && e.contextRef === "CurrentYearDuration_NonConsolidatedMember"
     );
-    if (duration) return duration.value;
-
-    // 3. フォールバックコンテキスト
-    const fallback = elements.find(
-      (e) =>
-        e.localName === tagName &&
-        fallbackKeywords.some((kw) => e.contextRef.includes(kw))
-    );
-    if (fallback) return fallback.value;
-
-    // 4. タグ名一致なら任意コンテキストで最初の要素
+    if (nonConsolidated) return nonConsolidated.value;
+  }
+  // 最終フォールバック: 想定外のコンテキスト命名でも、タグ名一致のみで採用
+  for (const tagName of tagNames) {
     const any = elements.find((e) => e.localName === tagName);
     if (any) return any.value;
   }
-
   return null;
 }
 

@@ -108,7 +108,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       secCode,
-      currentPrice: q.regularMarketPrice ?? null,
+      // 「前日終値」表記のため、ライブ価格(regularMarketPrice)ではなく
+      // 前営業日の終値(regularMarketPreviousClose)を使用する
+      currentPrice: q.regularMarketPreviousClose ?? q.regularMarketPrice ?? null,
       per:
         q.trailingPE != null ? Math.round(q.trailingPE * 10) / 10 : null,
       pbr:
