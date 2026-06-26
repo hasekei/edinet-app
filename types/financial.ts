@@ -49,7 +49,6 @@ export interface MarketData {
   secCode: string;
   currentPrice: number | null;
   industry: string | null;
-  marginRatio: number | null;
   yahooEps: number | null;
   yahooBps: number | null;
   yahooDps: number | null;
@@ -63,7 +62,6 @@ export interface ExportRow {
   per: number | null;
   pbr: number | null;
   dividendYield: number | null;
-  marginRatio: number | null;
   periodEnd: string;
   netSales: number | null;
   ordinaryIncome: number | null;

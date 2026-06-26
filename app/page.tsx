@@ -138,7 +138,6 @@ export default function Home() {
       per,
       pbr,
       dividendYield,
-      marginRatio: m?.marginRatio ?? null,
       periodEnd: d.periodEnd,
       netSales: d.netSales,
       ordinaryIncome: d.ordinaryIncome,
@@ -166,10 +165,7 @@ export default function Home() {
       .then((r) => r.json())
       .then((market: MarketData & { error?: string }) => {
         if (market && !market.error) {
-          setMarketData((prev) => ({
-            ...prev,
-            [code]: { ...market, marginRatio: null },
-          }));
+          setMarketData((prev) => ({ ...prev, [code]: market }));
         }
       })
       .catch(() => {});

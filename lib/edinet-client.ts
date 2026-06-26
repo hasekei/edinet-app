@@ -90,9 +90,7 @@ export async function findDocumentsByYearRange(
   const latestMonth = new Date(latest.submitDateTime).getMonth(); // 0-indexed
 
   const allDocs: DocumentInfo[] = [...latestDocs];
-  const foundYears = new Set<string>([
-    (latest.periodEnd ?? "").slice(0, 4),
-  ]);
+  const seenDocIds = new Set<string>(latestDocs.map((d) => d.docID));
 
   // 各年について提出月前後±45日を検索
   const yearsToSearch: number[] = [];
@@ -131,9 +129,8 @@ export async function findDocumentsByYearRange(
 
       for (const docs of results) {
         for (const doc of docs) {
-          const periodYear = (doc.periodEnd ?? "").slice(0, 4);
-          if (!foundYears.has(doc.docID)) {
-            foundYears.add(doc.docID);
+          if (!seenDocIds.has(doc.docID)) {
+            seenDocIds.add(doc.docID);
             allDocs.push(doc);
           }
         }
