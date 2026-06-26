@@ -73,7 +73,7 @@ function RefNote({ value, decimals, suffix }: { value: number | null; decimals: 
   if (value == null) return null;
   return (
     <div className="text-[10px] text-muted-foreground font-normal">
-      Yahoo参考 {value.toLocaleString("ja-JP", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}
+      Yahoo TTM参考 {value.toLocaleString("ja-JP", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}
     </div>
   );
 }
@@ -148,9 +148,14 @@ export default function MarketDataTable({ companies, marketData, latestFinancial
           })}
         </TableBody>
       </Table>
-      <p className="px-4 py-2 text-xs text-muted-foreground border-t">
-        ※ 株価はYahoo Financeより取得（遅延あり）。PER・PBR・配当利回りは前日終値 × EDINETの実績EPS/BPS/DPSで算出（実績ベースのため、Yahoo等サイトの「会社予想」基準の数値とは一致しません）。「Yahoo参考」はYahoo Finance自身のEPS/BPS/DPS（TTM基準）で同じ株価から算出した値で、データの食い違いがないかのクロスチェック用です。業種はJPX 33業種区分。
-      </p>
+      <ul className="px-4 py-2.5 text-xs text-muted-foreground border-t space-y-1 list-disc list-outside ml-4">
+        <li>株価はYahoo Financeより取得（前日終値、遅延あり）。業種はJPX 33業種区分。</li>
+        <li>PER・PBR・配当利回りは、この株価 × EDINETの実績EPS/BPS/DPSで算出した「実績ベース」の値です。</li>
+        <li>Yahoo Japan等のサイトに載っている「会社予想」基準の数値とは、算出基準が異なるため一致しません。</li>
+        <li>
+          <span className="text-muted-foreground/80">Yahoo TTM参考</span> は、Yahoo Finance自身が持つ直近12ヶ月（TTM）・アナリスト予想ベースのEPS/BPS/DPSを同じ株価に当てはめた値です。基準が異なるため上記の実績値とは一致しませんが、データの整合性確認用に併記しています。
+        </li>
+      </ul>
     </div>
   );
 }
