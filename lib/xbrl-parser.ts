@@ -454,23 +454,27 @@ function findPerShareValue(
   tagNames: string[],
   isConsolidated: boolean,
 ): number | null {
-  const contexts = isConsolidated
+  const preferred = isConsolidated
     ? CONSOLIDATED_INSTANT_CONTEXTS
     : NON_CONSOLIDATED_INSTANT_CONTEXTS;
+  const fallback = isConsolidated
+    ? NON_CONSOLIDATED_INSTANT_CONTEXTS
+    : CONSOLIDATED_INSTANT_CONTEXTS;
 
   for (const tagName of tagNames) {
-    for (const ctx of contexts) {
+    for (const ctx of preferred) {
       const match = elements.find((e) => e.localName === tagName && e.contextRef === ctx);
       if (match) return match.value;
     }
   }
-  // 単体企業で単体コンテキストが見つからない場合のみ、素のコンテキストにフォールバック
-  if (!isConsolidated) {
-    for (const tagName of tagNames) {
-      for (const ctx of CONSOLIDATED_INSTANT_CONTEXTS) {
-        const match = elements.find((e) => e.localName === tagName && e.contextRef === ctx);
-        if (match) return match.value;
-      }
+  // 優先基準のコンテキストが見つからない場合、もう一方の基準にフォールバック。
+  // 横田製作所のように"_NonConsolidatedMember"のみで全データを開示する
+  // 企業がある(素のコンテキストが一切存在しない)ため、isConsolidatedの値に
+  // 関わらず必ずフォールバックを試みる。
+  for (const tagName of tagNames) {
+    for (const ctx of fallback) {
+      const match = elements.find((e) => e.localName === tagName && e.contextRef === ctx);
+      if (match) return match.value;
     }
   }
   return null;

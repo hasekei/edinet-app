@@ -48,6 +48,9 @@ export async function GET(req: NextRequest) {
     secCode,
     currentPrice: null,
     industry: null,
+    yahooEps: null,
+    yahooBps: null,
+    yahooDps: null,
   };
 
   try {
@@ -111,6 +114,11 @@ export async function GET(req: NextRequest) {
       // この株価から自前で算出する(呼び出し元のexportRows/calcMetrics側)。
       currentPrice: q.regularMarketPreviousClose ?? q.regularMarketPrice ?? null,
       industry: toJaIndustry(industry),
+      // クロスチェック用のYahoo参考値(TTM基準のため、EDINET実績とは
+      // 期間がズレる場合がある。あくまで参考表示)
+      yahooEps: q.epsTrailingTwelveMonths ?? null,
+      yahooBps: q.bookValue ?? null,
+      yahooDps: q.trailingAnnualDividendRate ?? null,
     });
   } catch {
     return NextResponse.json(empty);

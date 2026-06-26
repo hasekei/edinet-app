@@ -42,28 +42,40 @@ function Val({
   );
 }
 
+function ratio(currentPrice: number | null, perShare: number | null | undefined, kind: "per" | "pbr" | "yield") {
+  if (!currentPrice || currentPrice <= 0 || perShare == null) return null;
+  if (kind === "yield") {
+    if (perShare < 0) return null;
+    return Math.round((perShare / currentPrice) * 10000) / 100;
+  }
+  if (perShare <= 0) return null;
+  return kind === "per"
+    ? Math.round((currentPrice / perShare) * 10) / 10
+    : Math.round((currentPrice / perShare) * 100) / 100;
+}
+
 function calcMetrics(
   currentPrice: number | null,
   fin: FinancialData | undefined,
+  market: MarketData | undefined,
 ) {
-  if (!currentPrice || currentPrice <= 0) return { per: null, pbr: null, dividendYield: null };
+  return {
+    per: ratio(currentPrice, fin?.eps, "per"),
+    pbr: ratio(currentPrice, fin?.bps, "pbr"),
+    dividendYield: ratio(currentPrice, fin?.dps, "yield"),
+    yahooPer: ratio(currentPrice, market?.yahooEps, "per"),
+    yahooPbr: ratio(currentPrice, market?.yahooBps, "pbr"),
+    yahooDividendYield: ratio(currentPrice, market?.yahooDps, "yield"),
+  };
+}
 
-  const per =
-    fin?.eps && fin.eps > 0
-      ? Math.round((currentPrice / fin.eps) * 10) / 10
-      : null;
-
-  const pbr =
-    fin?.bps && fin.bps > 0
-      ? Math.round((currentPrice / fin.bps) * 100) / 100
-      : null;
-
-  const dividendYield =
-    fin?.dps != null && fin.dps >= 0
-      ? Math.round((fin.dps / currentPrice) * 10000) / 100
-      : null;
-
-  return { per, pbr, dividendYield };
+function RefNote({ value, decimals, suffix }: { value: number | null; decimals: number; suffix: string }) {
+  if (value == null) return null;
+  return (
+    <div className="text-[10px] text-muted-foreground font-normal">
+      Yahoo参考 {value.toLocaleString("ja-JP", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}
+    </div>
+  );
 }
 
 export default function MarketDataTable({ companies, marketData, latestFinancials }: Props) {
@@ -95,9 +107,10 @@ export default function MarketDataTable({ companies, marketData, latestFinancial
           {companies.map(({ secCode, companyName }) => {
             const d = marketData[secCode];
             const loading = !d;
-            const { per, pbr, dividendYield } = calcMetrics(
+            const { per, pbr, dividendYield, yahooPer, yahooPbr, yahooDividendYield } = calcMetrics(
               d?.currentPrice ?? null,
               latestFinancials[secCode],
+              d,
             );
             return (
               <TableRow
@@ -120,12 +133,15 @@ export default function MarketDataTable({ companies, marketData, latestFinancial
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm bg-orange-50/40 dark:bg-orange-900/20">
                   <Val value={per} decimals={1} suffix=" 倍" loading={loading} />
+                  <RefNote value={yahooPer} decimals={1} suffix=" 倍" />
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm bg-rose-50/40 dark:bg-rose-900/20">
                   <Val value={pbr} decimals={2} suffix=" 倍" loading={loading} />
+                  <RefNote value={yahooPbr} decimals={2} suffix=" 倍" />
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums text-sm bg-teal-50/40 dark:bg-teal-900/20">
                   <Val value={dividendYield} decimals={2} suffix="%" loading={loading} />
+                  <RefNote value={yahooDividendYield} decimals={2} suffix="%" />
                 </TableCell>
               </TableRow>
             );
@@ -133,7 +149,7 @@ export default function MarketDataTable({ companies, marketData, latestFinancial
         </TableBody>
       </Table>
       <p className="px-4 py-2 text-xs text-muted-foreground border-t">
-        ※ 株価はYahoo Financeより取得（遅延あり）。PER・PBR・配当利回りは前日終値 × EDINETの実績EPS/BPS/DPSで算出（実績ベースのため、Yahoo等サイトの「会社予想」基準の数値とは一致しません）。業種はJPX 33業種区分。
+        ※ 株価はYahoo Financeより取得（遅延あり）。PER・PBR・配当利回りは前日終値 × EDINETの実績EPS/BPS/DPSで算出（実績ベースのため、Yahoo等サイトの「会社予想」基準の数値とは一致しません）。「Yahoo参考」はYahoo Finance自身のEPS/BPS/DPS（TTM基準）で同じ株価から算出した値で、データの食い違いがないかのクロスチェック用です。業種はJPX 33業種区分。
       </p>
     </div>
   );

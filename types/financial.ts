@@ -50,6 +50,9 @@ export interface MarketData {
   currentPrice: number | null;
   industry: string | null;
   marginRatio: number | null;
+  yahooEps: number | null;
+  yahooBps: number | null;
+  yahooDps: number | null;
 }
 
 export interface ExportRow {
