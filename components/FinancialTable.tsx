@@ -187,7 +187,7 @@ export default function FinancialTable({ results, marketData }: Props) {
       <ul className="px-4 py-2.5 text-xs text-muted-foreground border-t space-y-1 list-disc list-outside ml-4">
         <li>金額は億円・兆円単位に変換して表示しています（▼は赤字）。</li>
         <li>理論株価は、有価証券報告書の実績経常利益・BPS・自己資本比率から算出した参考値です。</li>
-        <li>IFRS採用企業は「経常利益」の概念がないため、理論株価は算出できません（— 表示）。</li>
+        <li>IFRS採用企業は「経常利益」の概念がないため理論株価自体は算出できませんが（— 表示）、自己資本比率・株式数推計・資産価値などの一部項目はエクスポートに含まれます。</li>
       </ul>
     </div>
   );

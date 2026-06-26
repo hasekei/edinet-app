@@ -43,11 +43,16 @@ function getDiscountRate(pct: number): number {
  * 事業価値  = 計算用EPS × 15 × ROA × 10 × 財務レバレッジ補正
  * 資産価値  = BPS × 割引評価率
  * 理論株価  = 事業価値 + 資産価値
+ *
+ * IFRS採用企業等で経常利益が取得できない場合、計算用EPS・ROA・事業価値・
+ * 理論株価は算出できないが、経常利益に依存しない他の項目
+ * （自己資本比率・株式数推計・財務レバレッジ補正・割引評価率・資産価値）
+ * は引き続き算出して返す。
  */
 export function calcTheoreticalPrice(fin: FinancialData): TheoreticalPriceResult {
   const { ordinaryIncome, bps, equityRatio, netIncome, eps } = fin;
 
-  if (ordinaryIncome == null || bps == null || equityRatio == null) return NULL_RESULT;
+  if (bps == null || equityRatio == null) return NULL_RESULT;
   if (!netIncome || !eps || eps === 0) return NULL_RESULT;
   if (bps <= 0) return NULL_RESULT;
 
@@ -57,26 +62,38 @@ export function calcTheoreticalPrice(fin: FinancialData): TheoreticalPriceResult
   const equityRatioPct = equityRatio <= 1 ? equityRatio * 100 : equityRatio;
   if (equityRatioPct <= 0) return NULL_RESULT;
 
-  const calcEps = (ordinaryIncome * 0.7) / sharesEstimate;
-  const equityRatioDecimal = equityRatioPct / 100;
-  const roa = calcEps / (bps / equityRatioDecimal);
   const leverage = getLeverage(equityRatioPct);
   const discountRate = getDiscountRate(equityRatioPct);
-  const businessValue = calcEps * 15 * roa * 10 * leverage;
   const assetValue = bps * discountRate;
-  const total = businessValue + assetValue;
 
-  if (!isFinite(total) || total < 0) return NULL_RESULT;
+  let calcEps: number | null = null;
+  let roa: number | null = null;
+  let businessValue: number | null = null;
+
+  if (ordinaryIncome != null) {
+    const equityRatioDecimal = equityRatioPct / 100;
+    const rawCalcEps = (ordinaryIncome * 0.7) / sharesEstimate;
+    const rawRoa = rawCalcEps / (bps / equityRatioDecimal);
+    const rawBusinessValue = rawCalcEps * 15 * rawRoa * 10 * leverage;
+    if (isFinite(rawBusinessValue)) {
+      calcEps = Math.round(rawCalcEps * 100) / 100;
+      roa = Math.round(rawRoa * 10000) / 10000;
+      businessValue = Math.round(rawBusinessValue);
+    }
+  }
+
+  const total = businessValue != null ? businessValue + assetValue : null;
+  const price = total != null && isFinite(total) && total >= 0 ? Math.round(total) : null;
 
   return {
-    price: Math.round(total),
+    price,
     sharesEstimate: Math.round(sharesEstimate),
-    calcEps: Math.round(calcEps * 100) / 100,
+    calcEps,
     equityRatioPct: Math.round(equityRatioPct * 10) / 10,
-    roa: Math.round(roa * 10000) / 10000,
+    roa,
     leverage,
     discountRate,
-    businessValue: Math.round(businessValue),
+    businessValue,
     assetValue: Math.round(assetValue),
   };
 }
