@@ -288,9 +288,12 @@ function extractFromXbrlContent(content: string): ParsedFinancials {
 
 // ---- 会計基準判定 ----------------------------------------------------------
 
+// タクソノミの名前空間プレフィックス("jpigp"等)のみで判定する。
+// 開示本文中に「IFRS」「US-GAAP」という単語が単に言及されているだけで
+// 誤判定してしまうため、文字列としての"IFRS"/"US-GAAP"は判定に使わない。
 function detectAccountingStandard(content: string): AccountingStandard {
-  if (content.includes("jpigp") || content.includes("IFRS")) return "IFRS";
-  if (content.includes("jpus") || content.includes("US-GAAP")) return "US_GAAP";
+  if (content.includes("jpigp")) return "IFRS";
+  if (content.includes("jpus")) return "US_GAAP";
   if (content.includes("jppfs") || content.includes("jpdei")) return "JGAAP";
   return "Unknown";
 }
