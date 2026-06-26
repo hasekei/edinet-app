@@ -8,13 +8,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { MarketData, FinancialData, ForecastData } from "@/types/financial";
+import type { MarketData, FinancialData } from "@/types/financial";
 
 interface Props {
   companies: Array<{ secCode: string; companyName?: string }>;
   marketData: Record<string, MarketData>;
   latestFinancials: Record<string, FinancialData>;
-  forecastData: Record<string, ForecastData>;
 }
 
 function Val({
@@ -46,7 +45,6 @@ function Val({
 function calcMetrics(
   currentPrice: number | null,
   fin: FinancialData | undefined,
-  forecast: ForecastData | undefined,
 ) {
   if (!currentPrice || currentPrice <= 0) return { per: null, pbr: null, dividendYield: null };
 
@@ -56,8 +54,8 @@ function calcMetrics(
       : null;
 
   const pbr =
-    forecast?.bps && forecast.bps > 0
-      ? Math.round((currentPrice / forecast.bps) * 100) / 100
+    fin?.bps && fin.bps > 0
+      ? Math.round((currentPrice / fin.bps) * 100) / 100
       : null;
 
   const dividendYield =
@@ -68,7 +66,7 @@ function calcMetrics(
   return { per, pbr, dividendYield };
 }
 
-export default function MarketDataTable({ companies, marketData, latestFinancials, forecastData }: Props) {
+export default function MarketDataTable({ companies, marketData, latestFinancials }: Props) {
   if (companies.length === 0) return null;
 
   return (
@@ -100,7 +98,6 @@ export default function MarketDataTable({ companies, marketData, latestFinancial
             const { per, pbr, dividendYield } = calcMetrics(
               d?.currentPrice ?? null,
               latestFinancials[secCode],
-              forecastData[secCode],
             );
             return (
               <TableRow

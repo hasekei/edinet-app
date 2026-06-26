@@ -16,11 +16,6 @@ export interface FinancialData {
   netIncome: number | null;
   eps: number | null;
   dps: number | null;
-}
-
-export interface ForecastData {
-  secCode: string;
-  forecastOrdinaryIncome: number | null;
   bps: number | null;
   equityRatio: number | null;
 }
@@ -77,7 +72,7 @@ export interface ExportRow {
   dps: number | null;
   submitDateTime: string | null;
   theoreticalPrice: number | null;
-  forecastOrdinaryIncome: number | null;
+  calcOrdinaryIncome: number | null;
   bps: number | null;
   equityRatio: number | null;
   sharesEstimate: number | null;

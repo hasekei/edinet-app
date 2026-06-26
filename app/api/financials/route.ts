@@ -33,6 +33,8 @@ async function fetchOne(
     netIncome: parsed.netIncome,
     eps: parsed.eps,
     dps: parsed.dps,
+    bps: parsed.bps,
+    equityRatio: parsed.equityRatio,
   };
 }
 

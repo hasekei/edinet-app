@@ -9,12 +9,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { BatchResult, ForecastData, MarketData } from "@/types/financial";
+import type { BatchResult, MarketData } from "@/types/financial";
 import { calcTheoreticalPrice } from "@/lib/theoretical-price";
 
 interface Props {
   results: BatchResult[];
-  forecastData: Record<string, ForecastData>;
   marketData: Record<string, MarketData>;
 }
 
@@ -77,19 +76,10 @@ function NumCell({ value, colIdx }: { value: number | null | undefined; colIdx: 
 function TheoreticalCell({
   theoreticalPrice,
   currentPrice,
-  loading,
 }: {
   theoreticalPrice: number | null;
   currentPrice: number | null;
-  loading: boolean;
 }) {
-  if (loading) {
-    return (
-      <TableCell className="text-right text-xs text-muted-foreground bg-yellow-50/40 dark:bg-yellow-900/20 whitespace-nowrap">
-        取得中…
-      </TableCell>
-    );
-  }
   if (theoreticalPrice == null) {
     return (
       <TableCell className="text-right text-muted-foreground bg-yellow-50/40 dark:bg-yellow-900/20">—</TableCell>
@@ -117,7 +107,7 @@ function TheoreticalCell({
   );
 }
 
-export default function FinancialTable({ results, forecastData, marketData }: Props) {
+export default function FinancialTable({ results, marketData }: Props) {
   const rows = results.flatMap((r) => {
     if (r.status !== "done") return [];
     if (r.multipleData) return r.multipleData;
@@ -153,11 +143,9 @@ export default function FinancialTable({ results, forecastData, marketData }: Pr
         </TableHeader>
         <TableBody>
           {rows.map((d, i) => {
-            const f = forecastData[d.secCode];
             const m = marketData[d.secCode];
-            const tpResult = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
-            const theoreticalPrice = tpResult?.price ?? null;
-            const forecastLoading = !f;
+            const tpResult = calcTheoreticalPrice(d);
+            const theoreticalPrice = tpResult.price;
 
             return (
               <TableRow
@@ -190,7 +178,6 @@ export default function FinancialTable({ results, forecastData, marketData }: Pr
                 <TheoreticalCell
                   theoreticalPrice={theoreticalPrice}
                   currentPrice={m?.currentPrice ?? null}
-                  loading={forecastLoading}
                 />
               </TableRow>
             );
@@ -198,7 +185,7 @@ export default function FinancialTable({ results, forecastData, marketData }: Pr
         </TableBody>
       </Table>
       <p className="px-4 py-2 text-xs text-muted-foreground border-t">
-        ※ 億円・兆円単位に変換して表示。▼ は赤字を示します。理論株価は決算短信の予想経常利益・BPS・自己資本比率から算出（参考値）。
+        ※ 億円・兆円単位に変換して表示。▼ は赤字を示します。理論株価は有報の実績経常利益・BPS・自己資本比率から算出（参考値）。
       </p>
     </div>
   );

@@ -9,7 +9,7 @@ import CompanySearch from "@/components/CompanySearch";
 import FinancialTable from "@/components/FinancialTable";
 import ExportPanel from "@/components/ExportPanel";
 import StatusList from "@/components/StatusList";
-import type { BatchResult, FinancialData, MarketData, ExportRow, ForecastData } from "@/types/financial";
+import type { BatchResult, FinancialData, MarketData, ExportRow } from "@/types/financial";
 import { calcTheoreticalPrice } from "@/lib/theoretical-price";
 import MarketDataTable from "@/components/MarketDataTable";
 
@@ -108,7 +108,6 @@ export default function Home() {
   const [results, setResults] = useState<BatchResult[]>([]);
   const [running, setRunning] = useState(false);
   const [marketData, setMarketData] = useState<Record<string, MarketData>>({});
-  const [forecastData, setForecastData] = useState<Record<string, ForecastData>>({});
   const resultsRef = useRef<HTMLElement>(null);
 
   const doneRows = results.flatMap((r) => {
@@ -126,11 +125,10 @@ export default function Home() {
 
   const exportRows: ExportRow[] = doneRows.map((d) => {
     const m = marketData[d.secCode];
-    const f = forecastData[d.secCode];
-    const tp = f ? calcTheoreticalPrice(f, d.netIncome, d.eps) : null;
+    const tp = calcTheoreticalPrice(d);
     const price = m?.currentPrice ?? null;
     const per = price && d.eps && d.eps > 0 ? Math.round(price / d.eps * 10) / 10 : null;
-    const pbr = price && f?.bps && f.bps > 0 ? Math.round(price / f.bps * 100) / 100 : null;
+    const pbr = price && d.bps && d.bps > 0 ? Math.round(price / d.bps * 100) / 100 : null;
     const dividendYield = price && d.dps != null && d.dps >= 0 ? Math.round(d.dps / price * 10000) / 100 : null;
     return {
       secCode: d.secCode,
@@ -148,18 +146,18 @@ export default function Home() {
       eps: d.eps,
       dps: d.dps,
       submitDateTime: d.submitDateTime ?? null,
-      forecastOrdinaryIncome: f?.forecastOrdinaryIncome ?? null,
-      bps: f?.bps ?? null,
-      equityRatio: f?.equityRatio ?? null,
-      sharesEstimate: tp?.sharesEstimate ?? null,
-      calcEps: tp?.calcEps ?? null,
-      equityRatioPct: tp?.equityRatioPct ?? null,
-      roa: tp?.roa ?? null,
-      leverage: tp?.leverage ?? null,
-      discountRate: tp?.discountRate ?? null,
-      businessValue: tp?.businessValue ?? null,
-      assetValue: tp?.assetValue ?? null,
-      theoreticalPrice: tp?.price ?? null,
+      calcOrdinaryIncome: d.ordinaryIncome,
+      bps: d.bps,
+      equityRatio: d.equityRatio,
+      sharesEstimate: tp.sharesEstimate,
+      calcEps: tp.calcEps,
+      equityRatioPct: tp.equityRatioPct,
+      roa: tp.roa,
+      leverage: tp.leverage,
+      discountRate: tp.discountRate,
+      businessValue: tp.businessValue,
+      assetValue: tp.assetValue,
+      theoreticalPrice: tp.price,
     };
   });
 
@@ -177,15 +175,6 @@ export default function Home() {
       .catch(() => {});
   }
 
-  function fetchForecastBg(code: string) {
-    fetch(`/api/forecast?secCode=${code}`)
-      .then((r) => r.json())
-      .then((data: ForecastData) => {
-        setForecastData((prev) => ({ ...prev, [code]: data }));
-      })
-      .catch(() => {});
-  }
-
   async function handleSingle() {
     const code = singleCode.trim();
     if (!/^\d{4}$/.test(code)) {
@@ -198,7 +187,6 @@ export default function Home() {
     }
     setRunning(true);
     setMarketData({});
-    setForecastData({});
     setResults([{ secCode: code, companyName: singleName, status: "processing" }]);
     setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     try {
@@ -207,7 +195,6 @@ export default function Home() {
       setResults([{ secCode: code, companyName: name, status: "done", ...result }]);
       toast.success(`${name} のデータを取得しました`);
       fetchMarketDataBg(code);
-      fetchForecastBg(code);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setResults([{ secCode: code, status: "error", error: msg }]);
@@ -238,7 +225,6 @@ export default function Home() {
 
     setRunning(true);
     setMarketData({});
-    setForecastData({});
     const initial: BatchResult[] = codes.map((c) => ({ secCode: c, status: "pending" }));
     setResults(initial);
     setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
@@ -253,7 +239,6 @@ export default function Home() {
         const name = result.data?.companyName ?? result.multipleData?.[0]?.companyName;
         updated[i] = { secCode: code, companyName: name, status: "done", ...result };
         fetchMarketDataBg(code);
-        fetchForecastBg(code);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         updated[i] = { secCode: code, status: "error", error: msg };
@@ -373,14 +358,13 @@ export default function Home() {
               ]}
               marketData={marketData}
               latestFinancials={latestFinancials}
-              forecastData={forecastData}
             />
           </div>
           <div className="space-y-3">
             <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
               財務データ（有価証券報告書）
             </h2>
-            <FinancialTable results={results} forecastData={forecastData} marketData={marketData} />
+            <FinancialTable results={results} marketData={marketData} />
             <ExportPanel rows={exportRows} />
           </div>
         </section>

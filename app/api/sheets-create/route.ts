@@ -7,7 +7,7 @@ const HEADERS = [
   "配当利回り(%)", "決算期", "売上高", "経常利益",
   "最終利益", "1株利益", "1株配当", "発表日",
   // 理論株価 計算過程
-  "予想経常利益", "BPS", "自己資本比率(%)",
+  "経常利益（計算用・実績）", "BPS", "自己資本比率(%)",
   "発行済株式数（推計）", "計算用EPS", "ROA",
   "財務レバレッジ補正", "割引評価率", "事業価値", "資産価値", "理論株価",
 ];
@@ -66,7 +66,7 @@ function formatRow(d: ExportRow): string[] {
     d.dps != null ? new Intl.NumberFormat("ja-JP").format(d.dps) + "円" : "",
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
     // 理論株価 計算過程
-    formatJPY(d.forecastOrdinaryIncome),
+    formatJPY(d.calcOrdinaryIncome),
     d.bps != null ? new Intl.NumberFormat("ja-JP").format(Math.round(d.bps)) + "円" : "",
     pct(d.equityRatioPct),
     d.sharesEstimate != null ? new Intl.NumberFormat("ja-JP").format(d.sharesEstimate) + "株" : "",

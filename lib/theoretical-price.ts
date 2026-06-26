@@ -1,4 +1,4 @@
-import type { ForecastData } from "@/types/financial";
+import type { FinancialData } from "@/types/financial";
 
 export interface TheoreticalPriceResult {
   price: number | null;
@@ -35,21 +35,19 @@ function getDiscountRate(pct: number): number {
 
 /**
  * 理論株価を計算し、全中間値を返す。
+ * 決算短信の予想経常利益はEDINETでは取得不可能なため、
+ * 有報の実績経常利益で代用する（参考値）。
  *
- * 計算用EPS = 予想経常利益 × 0.7 ÷ 発行済株式数（推計）
+ * 計算用EPS = 経常利益（実績） × 0.7 ÷ 発行済株式数（推計）
  * ROA       = 計算用EPS ÷ (BPS ÷ 自己資本比率)
  * 事業価値  = 計算用EPS × 15 × ROA × 10 × 財務レバレッジ補正
  * 資産価値  = BPS × 割引評価率
  * 理論株価  = 事業価値 + 資産価値
  */
-export function calcTheoreticalPrice(
-  forecast: ForecastData,
-  netIncome: number | null,
-  eps: number | null,
-): TheoreticalPriceResult {
-  const { forecastOrdinaryIncome, bps, equityRatio } = forecast;
+export function calcTheoreticalPrice(fin: FinancialData): TheoreticalPriceResult {
+  const { ordinaryIncome, bps, equityRatio, netIncome, eps } = fin;
 
-  if (forecastOrdinaryIncome == null || bps == null || equityRatio == null) return NULL_RESULT;
+  if (ordinaryIncome == null || bps == null || equityRatio == null) return NULL_RESULT;
   if (!netIncome || !eps || eps === 0) return NULL_RESULT;
   if (bps <= 0) return NULL_RESULT;
 
@@ -59,7 +57,7 @@ export function calcTheoreticalPrice(
   const equityRatioPct = equityRatio <= 1 ? equityRatio * 100 : equityRatio;
   if (equityRatioPct <= 0) return NULL_RESULT;
 
-  const calcEps = (forecastOrdinaryIncome * 0.7) / sharesEstimate;
+  const calcEps = (ordinaryIncome * 0.7) / sharesEstimate;
   const equityRatioDecimal = equityRatioPct / 100;
   const roa = calcEps / (bps / equityRatioDecimal);
   const leverage = getLeverage(equityRatioPct);

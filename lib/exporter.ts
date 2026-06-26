@@ -17,7 +17,7 @@ const HEADERS = [
   "1株配当",
   "発表日",
   // 理論株価 計算過程
-  "予想経常利益",
+  "経常利益（計算用・実績）",
   "BPS",
   "自己資本比率(%)",
   "発行済株式数（推計）",
@@ -47,7 +47,7 @@ function formatRow(d: ExportRow): (string | number | null)[] {
     d.dps,
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
     // 理論株価 計算過程
-    d.forecastOrdinaryIncome,
+    d.calcOrdinaryIncome,
     d.bps,
     d.equityRatioPct,
     d.sharesEstimate,
