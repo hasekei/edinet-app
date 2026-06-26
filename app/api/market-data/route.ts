@@ -47,9 +47,6 @@ export async function GET(req: NextRequest) {
   const empty = {
     secCode,
     currentPrice: null,
-    per: null,
-    pbr: null,
-    dividendYield: null,
     industry: null,
   };
 
@@ -109,16 +106,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       secCode,
       // 「前日終値」表記のため、ライブ価格(regularMarketPrice)ではなく
-      // 前営業日の終値(regularMarketPreviousClose)を使用する
+      // 前営業日の終値(regularMarketPreviousClose)を使用する。
+      // PER/PBR/配当利回りはYahooの値を使わず、EDINETの実績EPS/BPS/DPSと
+      // この株価から自前で算出する(呼び出し元のexportRows/calcMetrics側)。
       currentPrice: q.regularMarketPreviousClose ?? q.regularMarketPrice ?? null,
-      per:
-        q.trailingPE != null ? Math.round(q.trailingPE * 10) / 10 : null,
-      pbr:
-        q.priceToBook != null ? Math.round(q.priceToBook * 100) / 100 : null,
-      dividendYield:
-        q.trailingAnnualDividendYield != null
-          ? Math.round(q.trailingAnnualDividendYield * 10000) / 100
-          : null,
       industry: toJaIndustry(industry),
     });
   } catch {

@@ -48,9 +48,6 @@ export interface BatchResult {
 export interface MarketData {
   secCode: string;
   currentPrice: number | null;
-  per: number | null;
-  pbr: number | null;
-  dividendYield: number | null;
   industry: string | null;
   marginRatio: number | null;
 }
