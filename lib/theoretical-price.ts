@@ -44,20 +44,16 @@ function getDiscountRate(pct: number): number {
  * 資産価値  = BPS × 割引評価率
  * 理論株価  = 事業価値 + 資産価値
  *
- * IFRS採用企業等で経常利益が取得できない場合、計算用EPS・ROA・事業価値・
- * 理論株価は算出できないが、経常利益に依存しない他の項目
- * （自己資本比率・株式数推計・財務レバレッジ補正・割引評価率・資産価値）
- * は引き続き算出して返す。
+ * 経常利益・純利益・EPSのいずれかが取得できない場合でも、それらに依存しない
+ * 項目は引き続き算出して返す（全項目を一律nullにはしない）。
+ * - 自己資本比率・財務レバレッジ補正・割引評価率・資産価値: BPS・自己資本比率のみで算出可能
+ * - 発行済株式数（推計）: 純利益・EPSが必要
+ * - 計算用EPS・ROA・事業価値・理論株価: 上記に加えて経常利益が必要
  */
 export function calcTheoreticalPrice(fin: FinancialData): TheoreticalPriceResult {
   const { ordinaryIncome, bps, equityRatio, netIncome, eps } = fin;
 
-  if (bps == null || equityRatio == null) return NULL_RESULT;
-  if (!netIncome || !eps || eps === 0) return NULL_RESULT;
-  if (bps <= 0) return NULL_RESULT;
-
-  const sharesEstimate = netIncome / eps;
-  if (sharesEstimate <= 0) return NULL_RESULT;
+  if (bps == null || equityRatio == null || bps <= 0) return NULL_RESULT;
 
   const equityRatioPct = equityRatio <= 1 ? equityRatio * 100 : equityRatio;
   if (equityRatioPct <= 0) return NULL_RESULT;
@@ -66,19 +62,27 @@ export function calcTheoreticalPrice(fin: FinancialData): TheoreticalPriceResult
   const discountRate = getDiscountRate(equityRatioPct);
   const assetValue = bps * discountRate;
 
+  let sharesEstimate: number | null = null;
   let calcEps: number | null = null;
   let roa: number | null = null;
   let businessValue: number | null = null;
 
-  if (ordinaryIncome != null) {
-    const equityRatioDecimal = equityRatioPct / 100;
-    const rawCalcEps = (ordinaryIncome * 0.7) / sharesEstimate;
-    const rawRoa = rawCalcEps / (bps / equityRatioDecimal);
-    const rawBusinessValue = rawCalcEps * 15 * rawRoa * 10 * leverage;
-    if (isFinite(rawBusinessValue)) {
-      calcEps = Math.round(rawCalcEps * 100) / 100;
-      roa = Math.round(rawRoa * 10000) / 10000;
-      businessValue = Math.round(rawBusinessValue);
+  if (netIncome && eps) {
+    const rawSharesEstimate = netIncome / eps;
+    if (rawSharesEstimate > 0) {
+      sharesEstimate = Math.round(rawSharesEstimate);
+
+      if (ordinaryIncome != null) {
+        const equityRatioDecimal = equityRatioPct / 100;
+        const rawCalcEps = (ordinaryIncome * 0.7) / rawSharesEstimate;
+        const rawRoa = rawCalcEps / (bps / equityRatioDecimal);
+        const rawBusinessValue = rawCalcEps * 15 * rawRoa * 10 * leverage;
+        if (isFinite(rawBusinessValue)) {
+          calcEps = Math.round(rawCalcEps * 100) / 100;
+          roa = Math.round(rawRoa * 10000) / 10000;
+          businessValue = Math.round(rawBusinessValue);
+        }
+      }
     }
   }
 
@@ -87,7 +91,7 @@ export function calcTheoreticalPrice(fin: FinancialData): TheoreticalPriceResult
 
   return {
     price,
-    sharesEstimate: Math.round(sharesEstimate),
+    sharesEstimate,
     calcEps,
     equityRatioPct: Math.round(equityRatioPct * 10) / 10,
     roa,
