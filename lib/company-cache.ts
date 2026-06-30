@@ -81,7 +81,7 @@ export function searchCompanies(
     .filter(
       (c) =>
         c.filerName.toLowerCase().includes(q) ||
-        (c.secCode && c.secCode.startsWith(q))
+        (c.secCode && c.secCode.toLowerCase().startsWith(q))
     )
     .slice(0, 15);
 }

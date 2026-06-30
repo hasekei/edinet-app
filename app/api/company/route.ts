@@ -3,9 +3,9 @@ import { findDocumentsBySecCode } from "@/lib/edinet-client";
 
 export async function GET(req: NextRequest) {
   const secCode = req.nextUrl.searchParams.get("secCode");
-  if (!secCode || !/^\d{4}$/.test(secCode)) {
+  if (!secCode || !/^[A-Za-z0-9]{4}$/.test(secCode)) {
     return NextResponse.json(
-      { error: "4桁の証券コードを入力してください" },
+      { error: "4桁の証券コードを入力してください（例: 7203、141A）" },
       { status: 400 }
     );
   }

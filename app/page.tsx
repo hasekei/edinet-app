@@ -173,8 +173,8 @@ export default function Home() {
 
   async function handleSingle() {
     const code = singleCode.trim();
-    if (!/^\d{4}$/.test(code)) {
-      toast.error("4桁の証券コードを入力してください");
+    if (!/^[A-Za-z0-9]{4}$/.test(code)) {
+      toast.error("4桁の証券コードを入力してください（例: 7203、141A）");
       return;
     }
     if (singleUseRange && singleFromYear > singleToYear) {
@@ -204,7 +204,7 @@ export default function Home() {
     const codes = batchText
       .split(/[\n,\s]+/)
       .map((s) => s.trim())
-      .filter((s) => /^\d{4}$/.test(s));
+      .filter((s) => /^[A-Za-z0-9]{4}$/.test(s));
 
     if (codes.length === 0) {
       toast.error("有効な4桁の証券コードが見つかりません");

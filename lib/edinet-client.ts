@@ -28,7 +28,7 @@ export async function findDocumentsBySecCode(
   daysBack = 400
 ): Promise<DocumentInfo[]> {
   const apiKey = getApiKey();
-  const paddedSecCode = secCode.padEnd(5, "0");
+  const paddedSecCode = secCode.toUpperCase().padEnd(5, "0");
 
   const today = new Date();
   const results: DocumentInfo[] = [];
@@ -79,7 +79,7 @@ export async function findDocumentsByYearRange(
   docTypeCode = "120"
 ): Promise<DocumentInfo[]> {
   const apiKey = getApiKey();
-  const paddedSecCode = secCode.padEnd(5, "0");
+  const paddedSecCode = secCode.toUpperCase().padEnd(5, "0");
 
   // まず最新1件で提出月パターンを把握
   const latestDocs = await findDocumentsBySecCode(secCode, docTypeCode, 400);

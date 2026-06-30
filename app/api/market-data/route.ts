@@ -40,7 +40,7 @@ async function getAuth(): Promise<{ crumb: string; cookie: string } | null> {
 
 export async function GET(req: NextRequest) {
   const secCode = req.nextUrl.searchParams.get("secCode");
-  if (!secCode || !/^\d{4}$/.test(secCode)) {
+  if (!secCode || !/^[A-Za-z0-9]{4}$/.test(secCode)) {
     return NextResponse.json({ error: "Invalid secCode" }, { status: 400 });
   }
 
