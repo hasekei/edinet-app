@@ -6,9 +6,9 @@ const HEADERS = [
   "証券コード", "銘柄名", "業種",
   "前日終値（円）", "PER（倍）", "PBR（倍）", "配当利回り（%）",
   "決算期",
-  "売上高（円）", "経常利益（円）", "最終利益（円）", "1株利益（円）", "1株配当（円）", "発表日",
+  "売上高（億円）", "経常利益（億円）", "最終利益（億円）", "1株利益（円）", "1株配当（円）", "発表日",
   // 理論株価 計算過程
-  "計算用経常利益（円）", "BPS（円）", "自己資本比率（%）",
+  "計算用経常利益（億円）", "BPS（円）", "自己資本比率（%）",
   "発行済株式数・推計（株）", "計算用EPS（円）", "ROA",
   "財務レバレッジ補正", "割引評価率",
   "事業価値（円）", "資産価値（円）", "理論株価（円）",
@@ -34,14 +34,14 @@ function formatRow(d: ExportRow): (string | number | null)[] {
     d.pbr ?? null,
     d.dividendYield ?? null,
     d.periodEnd ?? "",
-    d.netSales ?? null,
-    d.ordinaryIncome ?? null,
-    d.netIncome ?? null,
+    d.netSales != null ? d.netSales / 1e8 : null,
+    d.ordinaryIncome != null ? d.ordinaryIncome / 1e8 : null,
+    d.netIncome != null ? d.netIncome / 1e8 : null,
     d.eps ?? null,
     d.dps ?? null,
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
     // 理論株価 計算過程
-    d.calcOrdinaryIncome ?? null,
+    d.calcOrdinaryIncome != null ? d.calcOrdinaryIncome / 1e8 : null,
     d.bps ?? null,
     d.equityRatioPct ?? null,
     d.sharesEstimate ?? null,
@@ -58,11 +58,12 @@ function formatRow(d: ExportRow): (string | number | null)[] {
 // 列インデックス(0始まり)→数値フォーマットのマッピング
 // col 3: 前日終値, 8-10: P/L系, 12: DPS, 14: 計算用経常利益, 17: 株数, 22-24: 株価系
 const NUM_FORMATS: [number[], string][] = [
-  [[3, 8, 9, 10, 12, 14, 17, 22, 23, 24], "#,##0"],      // 整数円・株数
-  [[11, 15, 18], "#,##0.##"],                              // EPS/BPS/calcEps（小数可変）
-  [[4, 16], "0.0"],                                        // PER・自己資本比率
-  [[5, 6, 20, 21], "0.00"],                               // PBR・配当利回り・レバレッジ・割引評価率
-  [[19], "0.0000"],                                        // ROA
+  [[3, 12, 17, 22, 23, 24], "#,##0"],      // 整数円・株数
+  [[8, 9, 10, 14], "#,##0.0"],             // 億円（P/L系、小数1桁）
+  [[11, 15, 18], "#,##0.##"],              // EPS/BPS/calcEps（小数可変）
+  [[4, 16], "0.0"],                        // PER・自己資本比率
+  [[5, 6, 20, 21], "0.00"],               // PBR・配当利回り・レバレッジ・割引評価率
+  [[19], "0.0000"],                        // ROA
 ];
 
 function buildAuth(raw: string) {
