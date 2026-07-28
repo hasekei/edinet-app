@@ -20,7 +20,7 @@ const HEADERS = [
   "計算用経常利益（億円）",
   "BPS（円）",
   "自己資本比率（%）",
-  "発行済株式数・推計（株）",
+  "発行済株式数・推計（万株）",
   "計算用EPS（円）",
   "ROA",
   "財務レバレッジ補正",
@@ -50,7 +50,7 @@ function formatRow(d: ExportRow): (string | number | null)[] {
     d.calcOrdinaryIncome != null ? d.calcOrdinaryIncome / 1e8 : null,
     d.bps,
     d.equityRatioPct,
-    d.sharesEstimate,
+    d.sharesEstimate != null ? Math.round(d.sharesEstimate / 10000) : null,
     d.calcEps,
     d.roa,
     d.leverage,
@@ -117,13 +117,14 @@ export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
 
   for (const d of rows) {
     const dataRow = ws.addRow(formatRow(d));
-    dataRow.eachCell({ includeEmpty: true }, (cell, colNo) => {
-      const fmt = COL_NUM_FMT[colNo];
-      if (fmt && typeof cell.value === "number") {
+    for (const [colStr, fmt] of Object.entries(COL_NUM_FMT)) {
+      const colNum = parseInt(colStr, 10);
+      const cell = dataRow.getCell(colNum);
+      if (typeof cell.value === "number") {
         cell.numFmt = fmt;
         cell.alignment = { horizontal: "right" };
       }
-    });
+    }
   }
 
   // 列幅

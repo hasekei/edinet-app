@@ -9,7 +9,7 @@ const HEADERS = [
   "売上高（億円）", "経常利益（億円）", "最終利益（億円）", "1株利益（円）", "1株配当（円）", "発表日",
   // 理論株価 計算過程
   "計算用経常利益（億円）", "BPS（円）", "自己資本比率（%）",
-  "発行済株式数・推計（株）", "計算用EPS（円）", "ROA",
+  "発行済株式数・推計（万株）", "計算用EPS（円）", "ROA",
   "財務レバレッジ補正", "割引評価率",
   "事業価値（円）", "資産価値（円）", "理論株価（円）",
 ];
@@ -44,7 +44,7 @@ function formatRow(d: ExportRow): (string | number | null)[] {
     d.calcOrdinaryIncome != null ? d.calcOrdinaryIncome / 1e8 : null,
     d.bps ?? null,
     d.equityRatioPct ?? null,
-    d.sharesEstimate ?? null,
+    d.sharesEstimate != null ? Math.round(d.sharesEstimate / 10000) : null,
     d.calcEps ?? null,
     d.roa ?? null,
     d.leverage ?? null,
