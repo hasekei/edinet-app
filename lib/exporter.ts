@@ -78,12 +78,36 @@ export function toCSV(rows: ExportRow[]): string {
   return lines.join("\n");
 }
 
+// col.numFmt は行追加後に column 経由で設定しても既存セルに遡及しない。
+// 行追加時にセル単位で設定することで確実に適用する。
+const COL_NUM_FMT: Record<number, string> = {
+  4:  "#,##0",     // 前日終値（円）
+  5:  "0.0",       // PER（倍）
+  6:  "0.00",      // PBR（倍）
+  7:  "0.00",      // 配当利回り（%）
+  9:  "#,##0.0",   // 売上高（億円）
+  10: "#,##0.0",   // 経常利益（億円）
+  11: "#,##0.0",   // 最終利益（億円）
+  12: "#,##0.00",  // 1株利益（円）
+  13: "#,##0",     // 1株配当（円）
+  15: "#,##0.0",   // 計算用経常利益（億円）
+  16: "#,##0.00",  // BPS（円）
+  17: "0.0",       // 自己資本比率（%）
+  18: "#,##0",     // 発行済株式数・推計（株）
+  19: "#,##0.00",  // 計算用EPS（円）
+  20: "0.0000",    // ROA
+  21: "0.00",      // 財務レバレッジ補正
+  22: "0.00",      // 割引評価率
+  23: "#,##0",     // 事業価値（円）
+  24: "#,##0",     // 資産価値（円）
+  25: "#,##0",     // 理論株価（円）
+};
+
 export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("財務データ");
 
-  ws.addRow(HEADERS);
-  const headerRow = ws.getRow(1);
+  const headerRow = ws.addRow(HEADERS);
   headerRow.fill = {
     type: "pattern",
     pattern: "solid",
@@ -92,30 +116,20 @@ export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
   headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
 
   for (const d of rows) {
-    ws.addRow(formatRow(d));
+    const dataRow = ws.addRow(formatRow(d));
+    dataRow.eachCell({ includeEmpty: true }, (cell, colNo) => {
+      const fmt = COL_NUM_FMT[colNo];
+      if (fmt && typeof cell.value === "number") {
+        cell.numFmt = fmt;
+        cell.alignment = { horizontal: "right" };
+      }
+    });
   }
 
-  // 列幅・数値書式
-  // 列: 1=コード 2=名 3=業種 4=終値 5=PER 6=PBR 7=利回 8=決算期
-  //     9=売上 10=経常 11=純利 12=EPS 13=DPS 14=発表
-  //     15=経常利益(計算用) 16=BPS 17=自己資本比率 18=株式数推計 19=計算EPS
-  //     20=ROA 21=財務レバレッジ 22=割引評価率 23=事業価値 24=資産価値 25=理論株価
-  const numericCols = [4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
+  // 列幅
   ws.columns.forEach((col, idx) => {
     const colNo = idx + 1;
     col.width = colNo === 2 ? 28 : colNo === 3 ? 18 : 14;
-    if (numericCols.includes(colNo)) {
-      col.alignment = { horizontal: "right" };
-      if (colNo === 20) {
-        col.numFmt = "#,##0.0000";  // ROA
-      } else if ([21, 22].includes(colNo)) {
-        col.numFmt = "#,##0.00";    // 財務レバレッジ補正, 割引評価率
-      } else if ([4, 9, 10, 11, 12, 13, 15, 16, 18, 19, 23, 24, 25].includes(colNo)) {
-        col.numFmt = "#,##0.##";    // 円建て・株数（小数可変）
-      } else {
-        col.numFmt = "#,##0.00";    // PER/PBR/利回り/自己資本比率
-      }
-    }
   });
 
   // 枠線
