@@ -66,6 +66,10 @@ export function toCSV(rows: ExportRow[]): string {
   for (const row of rows) {
     const cells = formatRow(row).map((v) => {
       if (v === null || v === undefined) return "";
+      if (typeof v === "number") {
+        const s = v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+        return `"${s}"`;
+      }
       const str = String(v);
       return str.includes(",") ? `"${str}"` : str;
     });
