@@ -229,7 +229,7 @@ export async function POST(req: NextRequest) {
               cell: {
                 userEnteredFormat: {
                   borders: {
-                    left: { style: "MEDIUM", colorStyle: { rgbColor: { red: 0.537, green: 0.329, blue: 0.012 } } },
+                    left: { style: "SOLID_MEDIUM", colorStyle: { rgbColor: { red: 0.537, green: 0.329, blue: 0.012 } } },
                   },
                 },
               },
