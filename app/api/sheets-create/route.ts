@@ -3,82 +3,67 @@ import { google } from "googleapis";
 import type { ExportRow } from "@/types/financial";
 
 const HEADERS = [
-  "証券コード", "銘柄名", "業種", "前日終値", "PER", "PBR",
-  "配当利回り(%)", "決算期", "売上高", "経常利益",
-  "最終利益", "1株利益", "1株配当", "発表日",
+  "証券コード", "銘柄名", "業種",
+  "前日終値（円）", "PER（倍）", "PBR（倍）", "配当利回り（%）",
+  "決算期",
+  "売上高（円）", "経常利益（円）", "最終利益（円）", "1株利益（円）", "1株配当（円）", "発表日",
   // 理論株価 計算過程
-  "経常利益（計算用・実績）", "BPS", "自己資本比率(%)",
-  "発行済株式数（推計）", "計算用EPS", "ROA",
-  "財務レバレッジ補正", "割引評価率", "事業価値", "資産価値", "理論株価",
+  "計算用経常利益（円）", "BPS（円）", "自己資本比率（%）",
+  "発行済株式数・推計（株）", "計算用EPS（円）", "ROA",
+  "財務レバレッジ補正", "割引評価率",
+  "事業価値（円）", "資産価値（円）", "理論株価（円）",
 ];
 
 // 各列の幅(px)
 const COL_WIDTHS = [
-  72, 150, 85,   // コード 銘柄名 業種
-  80, 55, 55, 80, // 終値 PER PBR 利回
-  70,             // 決算期
-  105, 105, 105, 75, 75, 80, // 売上〜発表日
+  72, 150, 85,          // コード 銘柄名 業種
+  95, 70, 70, 95,       // 前日終値 PER PBR 配当利回り
+  70,                   // 決算期
+  110, 110, 110, 85, 85, 80, // 売上〜発表日
   // 計算過程
-  105, 75, 80, 110, 80, 70, 80, 75, 105, 105, 95,
+  130, 85, 100, 150, 100, 70, 100, 80, 110, 110, 105,
 ];
 
-function formatJPY(v: number | null | undefined): string {
-  if (v == null) return "";
-  const negative = v < 0;
-  const abs = Math.abs(v);
-
-  const fmt = (n: number, dec = 0) =>
-    new Intl.NumberFormat("ja-JP", { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(n);
-
-  let text: string;
-  if (abs >= 1e8) {
-    if (abs >= 1e12) text = fmt(v / 1e12, 1) + " 兆円";
-    else text = fmt(Math.round(v / 1e8)) + " 億円";
-  } else {
-    if (abs >= 1_000_000) text = fmt(v / 1_000_000, 1) + " 兆円";
-    else if (abs >= 10_000) text = fmt(Math.round(v / 100)) + " 億円";
-    else if (abs >= 100) text = fmt(v / 100, 1) + " 億円";
-    else text = fmt(v) + " 百万円";
-  }
-
-  return negative ? `▼ ${text}` : text;
-}
-
-function formatRow(d: ExportRow): string[] {
-  const n = (v: number | null, dec = 1) =>
-    v == null ? "" : new Intl.NumberFormat("ja-JP", { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(v);
-
-  const pct = (v: number | null) => v == null ? "" : n(v, 1) + "%";
-
+function formatRow(d: ExportRow): (string | number | null)[] {
   return [
     d.secCode ?? "",
     d.companyName ?? "",
     d.industry ?? "",
-    d.currentPrice != null ? new Intl.NumberFormat("ja-JP").format(d.currentPrice) + "円" : "",
-    n(d.per),
-    n(d.pbr),
-    d.dividendYield != null ? n(d.dividendYield, 2) + "%" : "",
+    d.currentPrice ?? null,
+    d.per ?? null,
+    d.pbr ?? null,
+    d.dividendYield ?? null,
     d.periodEnd ?? "",
-    formatJPY(d.netSales),
-    formatJPY(d.ordinaryIncome),
-    formatJPY(d.netIncome),
-    d.eps != null ? n(d.eps) + "円" : "",
-    d.dps != null ? new Intl.NumberFormat("ja-JP").format(d.dps) + "円" : "",
+    d.netSales ?? null,
+    d.ordinaryIncome ?? null,
+    d.netIncome ?? null,
+    d.eps ?? null,
+    d.dps ?? null,
     d.submitDateTime ? d.submitDateTime.slice(0, 10) : "",
     // 理論株価 計算過程
-    formatJPY(d.calcOrdinaryIncome),
-    d.bps != null ? new Intl.NumberFormat("ja-JP").format(Math.round(d.bps)) + "円" : "",
-    pct(d.equityRatioPct),
-    d.sharesEstimate != null ? new Intl.NumberFormat("ja-JP").format(d.sharesEstimate) + "株" : "",
-    d.calcEps != null ? n(d.calcEps, 2) + "円" : "",
-    d.roa != null ? n(d.roa * 100, 2) + "%" : "",
-    d.leverage != null ? String(d.leverage) : "",
-    d.discountRate != null ? n(d.discountRate * 100, 1) + "%" : "",
-    d.businessValue != null ? new Intl.NumberFormat("ja-JP").format(d.businessValue) + "円" : "",
-    d.assetValue != null ? new Intl.NumberFormat("ja-JP").format(d.assetValue) + "円" : "",
-    d.theoreticalPrice != null ? new Intl.NumberFormat("ja-JP").format(d.theoreticalPrice) + "円" : "",
+    d.calcOrdinaryIncome ?? null,
+    d.bps ?? null,
+    d.equityRatioPct ?? null,
+    d.sharesEstimate ?? null,
+    d.calcEps ?? null,
+    d.roa ?? null,
+    d.leverage ?? null,
+    d.discountRate ?? null,
+    d.businessValue ?? null,
+    d.assetValue ?? null,
+    d.theoreticalPrice ?? null,
   ];
 }
+
+// 列インデックス(0始まり)→数値フォーマットのマッピング
+// col 3: 前日終値, 8-10: P/L系, 12: DPS, 14: 計算用経常利益, 17: 株数, 22-24: 株価系
+const NUM_FORMATS: [number[], string][] = [
+  [[3, 8, 9, 10, 12, 14, 17, 22, 23, 24], "#,##0"],      // 整数円・株数
+  [[11, 15, 18], "#,##0.##"],                              // EPS/BPS/calcEps（小数可変）
+  [[4, 16], "0.0"],                                        // PER・自己資本比率
+  [[5, 6, 20, 21], "0.00"],                               // PBR・配当利回り・レバレッジ・割引評価率
+  [[19], "0.0000"],                                        // ROA
+];
 
 function buildAuth(raw: string) {
   const parsed = JSON.parse(raw) as { client_email: string; private_key: string };
@@ -143,7 +128,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Step 2: データを書き込み ────────────────────────────────────────
-  const values = [HEADERS, ...rows.map(formatRow)];
+  const values = [HEADERS, ...rows.map(formatRow)] as (string | number | null)[][];
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -160,7 +145,7 @@ export async function POST(req: NextRequest) {
   // ── Step 3: 書式設定 ───────────────────────────────────────────────
   const dataRows = rows.length;
   const totalCols = HEADERS.length;
-  const calcStartCol = 14; // 「経常利益（計算用・実績）」以降
+  const calcStartCol = 14; // 「計算用経常利益（円）」以降
   try {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
@@ -214,7 +199,7 @@ export async function POST(req: NextRequest) {
               fields: "userEnteredFormat.horizontalAlignment",
             },
           },
-          // 理論株価計算列データ行のみ薄い黄色背景（ヘッダーは除く）
+          // 理論株価計算列データ行のみ薄い黄色背景
           {
             repeatCell: {
               range: {
@@ -248,6 +233,24 @@ export async function POST(req: NextRequest) {
               fields: "userEnteredFormat.borders.left",
             },
           },
+          // 列ごとの数値フォーマット
+          ...NUM_FORMATS.flatMap(([cols, pattern]) =>
+            cols.map((col) => ({
+              repeatCell: {
+                range: {
+                  sheetId: newSheetId,
+                  startRowIndex: 1, endRowIndex: dataRows + 1,
+                  startColumnIndex: col, endColumnIndex: col + 1,
+                },
+                cell: {
+                  userEnteredFormat: {
+                    numberFormat: { type: "NUMBER", pattern },
+                  },
+                },
+                fields: "userEnteredFormat.numberFormat",
+              },
+            }))
+          ),
           // 全列幅を設定
           ...COL_WIDTHS.map((pixelSize, i) => ({
             updateDimensionProperties: {

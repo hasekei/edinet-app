@@ -5,29 +5,29 @@ const HEADERS = [
   "証券コード",
   "銘柄名",
   "業種",
-  "前日終値",
-  "PER",
-  "PBR",
-  "配当利回り(%)",
+  "前日終値（円）",
+  "PER（倍）",
+  "PBR（倍）",
+  "配当利回り（%）",
   "決算期",
-  "売上高",
-  "経常利益",
-  "最終利益",
-  "1株利益",
-  "1株配当",
+  "売上高（円）",
+  "経常利益（円）",
+  "最終利益（円）",
+  "1株利益（円）",
+  "1株配当（円）",
   "発表日",
   // 理論株価 計算過程
-  "経常利益（計算用・実績）",
-  "BPS",
-  "自己資本比率(%)",
-  "発行済株式数（推計）",
-  "計算用EPS",
+  "計算用経常利益（円）",
+  "BPS（円）",
+  "自己資本比率（%）",
+  "発行済株式数・推計（株）",
+  "計算用EPS（円）",
   "ROA",
   "財務レバレッジ補正",
   "割引評価率",
-  "事業価値",
-  "資産価値",
-  "理論株価",
+  "事業価値（円）",
+  "資産価値（円）",
+  "理論株価（円）",
 ];
 
 function formatRow(d: ExportRow): (string | number | null)[] {
@@ -102,14 +102,14 @@ export async function toExcel(rows: ExportRow[]): Promise<Buffer> {
     col.width = colNo === 2 ? 28 : colNo === 3 ? 18 : 14;
     if (numericCols.includes(colNo)) {
       col.alignment = { horizontal: "right" };
-      // 小数4桁 (ROA, 割引評価率, 財務レバレッジ)
-      if ([20, 21, 22].includes(colNo)) {
-        col.numFmt = "#,##0.0000";
-      // 整数系
+      if (colNo === 20) {
+        col.numFmt = "#,##0.0000";  // ROA
+      } else if ([21, 22].includes(colNo)) {
+        col.numFmt = "#,##0.00";    // 財務レバレッジ補正, 割引評価率
       } else if ([4, 9, 10, 11, 12, 13, 15, 16, 18, 19, 23, 24, 25].includes(colNo)) {
-        col.numFmt = "#,##0.##";
+        col.numFmt = "#,##0.##";    // 円建て・株数（小数可変）
       } else {
-        col.numFmt = "#,##0.00";
+        col.numFmt = "#,##0.00";    // PER/PBR/利回り/自己資本比率
       }
     }
   });
