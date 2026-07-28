@@ -143,10 +143,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `データ書き込み失敗: ${detail}` }, { status: 500 });
   }
 
-  // ── Step 3: 書式設定 ───────────────────────────────────────────────
+  // ── Step 3a: 視覚的な書式設定（色・配置・幅・行固定） ──────────────────
   const dataRows = rows.length;
   const totalCols = HEADERS.length;
-  const calcStartCol = 14; // 「計算用経常利益（円）」以降
+  const calcStartCol = 14;
+  const formattingErrors: string[] = [];
+
   try {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
@@ -227,31 +229,13 @@ export async function POST(req: NextRequest) {
               cell: {
                 userEnteredFormat: {
                   borders: {
-                    left: { style: "MEDIUM", color: { red: 0.537, green: 0.329, blue: 0.012 } },
+                    left: { style: "MEDIUM", colorStyle: { rgbColor: { red: 0.537, green: 0.329, blue: 0.012 } } },
                   },
                 },
               },
               fields: "userEnteredFormat.borders.left",
             },
           },
-          // 列ごとの数値フォーマット
-          ...NUM_FORMATS.flatMap(([cols, pattern]) =>
-            cols.map((col) => ({
-              repeatCell: {
-                range: {
-                  sheetId: newSheetId,
-                  startRowIndex: 1, endRowIndex: dataRows + 1,
-                  startColumnIndex: col, endColumnIndex: col + 1,
-                },
-                cell: {
-                  userEnteredFormat: {
-                    numberFormat: { type: "NUMBER", pattern },
-                  },
-                },
-                fields: "userEnteredFormat.numberFormat",
-              },
-            }))
-          ),
           // 全列幅を設定
           ...COL_WIDTHS.map((pixelSize, i) => ({
             updateDimensionProperties: {
@@ -270,11 +254,44 @@ export async function POST(req: NextRequest) {
         ],
       },
     });
-  } catch {
-    // 装飾失敗は無視
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("Sheets visual formatting error:", msg);
+    formattingErrors.push(`visual: ${msg}`);
+  }
+
+  // ── Step 3b: 数値フォーマット（別バッチで分離） ──────────────────────
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: NUM_FORMATS.flatMap(([cols, pattern]) =>
+          cols.map((col) => ({
+            repeatCell: {
+              range: {
+                sheetId: newSheetId,
+                startRowIndex: 1, endRowIndex: dataRows + 1,
+                startColumnIndex: col, endColumnIndex: col + 1,
+              },
+              cell: {
+                userEnteredFormat: {
+                  numberFormat: { type: "NUMBER", pattern },
+                },
+              },
+              fields: "userEnteredFormat.numberFormat",
+            },
+          }))
+        ),
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("Sheets number format error:", msg);
+    formattingErrors.push(`numFmt: ${msg}`);
   }
 
   return NextResponse.json({
     url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}#gid=${newSheetId}`,
+    ...(formattingErrors.length > 0 ? { formattingErrors } : {}),
   });
 }

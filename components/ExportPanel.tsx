@@ -53,7 +53,11 @@ export default function ExportPanel({ rows }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `エラー (HTTP ${res.status})`);
       setSheetsUrl(data.url);
-      toast.success("Googleスプレッドシートを作成しました");
+      if (data.formattingErrors?.length) {
+        toast.warning(`書式設定に一部失敗しました: ${data.formattingErrors.join(" / ")}`);
+      } else {
+        toast.success("Googleスプレッドシートを作成しました");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラーが発生しました");
     } finally {
