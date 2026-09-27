@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
-import type { DocumentInfo } from "@/types/financial";
+import AdmZip from "adm-zip";
+import iconv from "iconv-lite";
 
 export interface CachedCompany {
   edinetCode: string;
@@ -7,67 +8,86 @@ export interface CachedCompany {
   filerName: string;
 }
 
-function dateStr(d: Date): string {
-  return d.toISOString().split("T")[0];
+const EDINET_CODE_LIST_URL =
+  "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/codelist/Edinetcode.zip";
+
+// EdinetcodeDlInfo.csv の列インデックス（ヘッダー2行の後、3行目がカラム名）
+const COL_EDINET_CODE = 0;
+const COL_FILER_NAME = 6;
+const COL_SEC_CODE = 11;
+
+// "a","b","c" 形式の1行を配列に分解する簡易CSVパーサー
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      fields.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  fields.push(cur);
+  return fields;
 }
 
 async function buildCompanyList(): Promise<CachedCompany[]> {
-  const apiKey = process.env.EDINET_API_KEY;
-  if (!apiKey) return [];
+  const res = await fetch(EDINET_CODE_LIST_URL, {
+    next: { revalidate: 86400 },
+  });
+  if (!res.ok) return [];
 
-  const today = new Date();
-  const dates: string[] = [];
-  // 四半期提出サイクル (90日) をカバーして主要上場企業をすべて収録
-  for (let i = 0; i < 90; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    dates.push(dateStr(d));
-  }
+  const arrayBuffer = await res.arrayBuffer();
+  const zip = new AdmZip(Buffer.from(arrayBuffer));
+  const entry = zip.getEntries().find((e) => e.entryName.endsWith(".csv"));
+  if (!entry) return [];
 
-  // 全日付を並列フェッチ（個別に3秒タイムアウト）
-  const allDocs = await Promise.all(
-    dates.map(async (date) => {
-      try {
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 3000);
-        const url = `https://api.edinet-fsa.go.jp/api/v2/documents.json?date=${date}&type=2&Subscription-Key=${apiKey}`;
-        const res = await fetch(url, {
-          signal: controller.signal,
-          next: { revalidate: 86400 },
-        });
-        clearTimeout(tid);
-        if (!res.ok) return [] as DocumentInfo[];
-        const json = await res.json();
-        return (json.results ?? []) as DocumentInfo[];
-      } catch {
-        return [] as DocumentInfo[];
-      }
-    })
-  );
+  const text = iconv.decode(entry.getData(), "Shift_JIS");
+  const lines = text.split(/\r\n|\n/);
 
-  const seen = new Set<string>();
+  // 1行目: ダウンロード日時、2行目: カラム名、3行目以降: データ
   const companies: CachedCompany[] = [];
-  for (const docs of allDocs) {
-    for (const d of docs) {
-      if (!d.edinetCode || seen.has(d.edinetCode)) continue;
-      seen.add(d.edinetCode);
-      if (d.filerName) {
-        companies.push({
-          edinetCode: d.edinetCode,
-          secCode: (d.secCode ?? "").slice(0, 4),
-          filerName: d.filerName,
-        });
-      }
-    }
+  const seen = new Set<string>();
+  for (let i = 2; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const cols = parseCsvLine(line);
+    const edinetCode = cols[COL_EDINET_CODE];
+    const filerName = cols[COL_FILER_NAME];
+    if (!edinetCode || seen.has(edinetCode) || !filerName) continue;
+    seen.add(edinetCode);
+    companies.push({
+      edinetCode,
+      secCode: (cols[COL_SEC_CODE] ?? "").slice(0, 4),
+      filerName,
+    });
   }
   return companies;
 }
 
-// Next.js の unstable_cache でサーバー側に永続キャッシュ（6時間）
+// Next.js の unstable_cache でサーバー側に永続キャッシュ（24時間）
 // Vercel のコールドスタートをまたいでも再ビルドしない
+// v4: EDINETコードリストCSV（1回のダウンロードで全社を取得）に変更し、
+//     90回のAPI並列呼び出しによる不安定さ（タイムアウトでの欠落）を解消
 export const getCompanyList = unstable_cache(
   buildCompanyList,
-  ["edinet-company-list-v3"],
+  ["edinet-company-list-v4"],
   { revalidate: 24 * 60 * 60 }
 );
 
