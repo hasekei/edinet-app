@@ -1,30 +1,6 @@
 import type { DocumentInfo } from "@/types/financial";
-import puppeteer, { Browser } from "puppeteer";
 
-const EDINET_BASE = "https://disclosure.edinet-fsa.go.jp/api/v2";
-
-let browserInstance: Browser | null = null;
-
-async function getBrowser(): Promise<Browser> {
-  if (!browserInstance) {
-    browserInstance = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
-    });
-  }
-  return browserInstance;
-}
-
-export async function closeBrowser() {
-  if (browserInstance) {
-    await browserInstance.close();
-    browserInstance = null;
-  }
-}
+const EDINET_BASE = "https://api.edinet-fsa.go.jp/api/v2";
 
 function getApiKey(): string {
   const key = process.env.EDINET_API_KEY;
@@ -36,50 +12,20 @@ function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
 }
 
-async function fetchJsonViaPage(url: string): Promise<any> {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+async function fetchJson(url: string): Promise<any> {
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+  });
 
+  if (!res.ok) {
+    throw new Error(`EDINET API エラー: HTTP ${res.status}`);
+  }
+
+  const text = await res.text();
   try {
-    page.setDefaultTimeout(30000);
-    page.setDefaultNavigationTimeout(30000);
-
-    let capturedJson: any = null;
-
-    page.on("response", async (response) => {
-      if (
-        response.url().includes("documents.json") &&
-        response.status() === 200
-      ) {
-        try {
-          const text = await response.text();
-          if (text.includes("results")) {
-            capturedJson = JSON.parse(text);
-          }
-        } catch {
-          // 解析エラーは無視
-        }
-      }
-    });
-
-    await page.goto(url, { waitUntil: "networkidle2" });
-
-    if (capturedJson) {
-      return capturedJson;
-    }
-
-    const bodyText = await page.evaluate(() => document.body.innerText);
-    if (bodyText && bodyText.includes("results")) {
-      try {
-        return JSON.parse(bodyText);
-      } catch {
-        // JSON パース失敗
-      }
-    }
-
-    throw new Error("JSON データが取得できませんでした");
-  } finally {
-    await page.close();
+    return JSON.parse(text);
+  } catch {
+    throw new Error("EDINET API から JSON 以外のレスポンスが返されました");
   }
 }
 
@@ -88,7 +34,7 @@ export async function getDocumentList(date: string): Promise<DocumentInfo[]> {
   const url = `${EDINET_BASE}/documents.json?date=${date}&type=2&Subscription-Key=${apiKey}`;
 
   try {
-    const json = await fetchJsonViaPage(url);
+    const json = await fetchJson(url);
     return (json.results ?? []) as DocumentInfo[];
   } catch (err) {
     console.error(`[EDINET] getDocumentList エラー:`, err);
@@ -157,7 +103,6 @@ export async function findDocumentsByYearRange(
 
   const latest = latestDocs[0];
   const latestYear = new Date(latest.submitDateTime).getFullYear();
-  const latestMonth = new Date(latest.submitDateTime).getMonth();
 
   const allDocs: DocumentInfo[] = [...latestDocs];
   const seenDocIds = new Set<string>(latestDocs.map((d) => d.docID));
@@ -221,21 +166,12 @@ export async function downloadDocumentZip(docID: string): Promise<Buffer> {
   const apiKey = getApiKey();
   const url = `${EDINET_BASE}/documents/${docID}?type=1&Subscription-Key=${apiKey}`;
 
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+  const res = await fetch(url);
 
-  try {
-    page.setDefaultTimeout(30000);
-
-    const response = await page.goto(url, { waitUntil: "networkidle0" });
-
-    if (!response || !response.ok()) {
-      throw new Error(`ドキュメント取得エラー: ${response?.status()}`);
-    }
-
-    const buffer = await response.buffer();
-    return buffer;
-  } finally {
-    await page.close();
+  if (!res.ok) {
+    throw new Error(`ドキュメント取得エラー: ${res.status}`);
   }
+
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
