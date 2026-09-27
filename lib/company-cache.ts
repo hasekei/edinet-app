@@ -30,7 +30,7 @@ async function buildCompanyList(): Promise<CachedCompany[]> {
       try {
         const controller = new AbortController();
         const tid = setTimeout(() => controller.abort(), 3000);
-        const url = `https://disclosure.edinet-fsa.go.jp/api/v2/documents.json?date=${date}&type=2&Subscription-Key=${apiKey}`;
+        const url = `https://api.edinet-fsa.go.jp/api/v2/documents.json?date=${date}&type=2&Subscription-Key=${apiKey}`;
         const res = await fetch(url, {
           signal: controller.signal,
           next: { revalidate: 86400 },
