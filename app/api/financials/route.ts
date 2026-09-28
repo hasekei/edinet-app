@@ -7,6 +7,9 @@ import {
 import { parseXbrlZip } from "@/lib/xbrl-parser";
 import type { FinancialData } from "@/types/financial";
 
+// 複数年取得は年数分の日付探索＋ダウンロードで時間がかかるため延長
+export const maxDuration = 60;
+
 async function fetchOne(
   secCode: string,
   docID: string,
@@ -71,18 +74,15 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      const results: FinancialData[] = [];
-      for (let i = 0; i < Math.min(docs.length, 10); i++) {
-        const d = docs[i];
-        try {
-          const data = await fetchOne(
-            secCode, d.docID, d.filerName, d.edinetCode, d.periodEnd, d.submitDateTime
-          );
-          results.push(data);
-        } catch {
-          // 個別エラーはスキップ
-        }
-      }
+      const targetDocs = docs.slice(0, 10);
+      const settled = await Promise.allSettled(
+        targetDocs.map((d) =>
+          fetchOne(secCode, d.docID, d.filerName, d.edinetCode, d.periodEnd, d.submitDateTime)
+        )
+      );
+      const results: FinancialData[] = settled
+        .filter((r): r is PromiseFulfilledResult<FinancialData> => r.status === "fulfilled")
+        .map((r) => r.value);
 
       if (results.length === 0) {
         return NextResponse.json({ error: "財務データの取得に失敗しました" }, { status: 500 });
